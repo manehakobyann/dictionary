@@ -11,7 +11,8 @@ const armenianElement = document.getElementById("armenian");
 const synonymsElement = document.getElementById("synonyms");
 const antonymsElement = document.getElementById("antonyms");
 const exampleElement = document.getElementById("example");
-const armenianExampleElement = document.getElementById("armenianExample");
+const armenianExampleElement =
+    document.getElementById("armenianExample");
 
 
 async function searchWord() {
@@ -28,24 +29,26 @@ async function searchWord() {
 
     try {
 
-        /*
-         * Lingora now uses our backend.
-         * The backend communicates with the dictionary service.
-         */
+        /* =========================
+           1. GET DICTIONARY DATA
+        ========================== */
+
         const url =
             "/api/search?word=" +
             encodeURIComponent(word);
 
-        // Stop waiting after 10 seconds
-        const controller = new AbortController();
+        const controller =
+            new AbortController();
 
-        const timeout = setTimeout(() => {
-            controller.abort();
-        }, 10000);
+        const timeout =
+            setTimeout(() => {
+                controller.abort();
+            }, 10000);
 
-        const response = await fetch(url, {
-            signal: controller.signal
-        });
+        const response =
+            await fetch(url, {
+                signal: controller.signal
+            });
 
         clearTimeout(timeout);
 
@@ -58,7 +61,8 @@ async function searchWord() {
             throw new Error("Server error");
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         if (!data || !data.length) {
             throw new Error("No results");
@@ -66,18 +70,12 @@ async function searchWord() {
 
         const entry = data[0];
 
-
-        // -------------------------
-        // WORD
-        // -------------------------
+        /* =========================
+           2. BASIC INFORMATION
+        ========================== */
 
         wordElement.textContent =
             entry.word || word;
-
-
-        // -------------------------
-        // PRONUNCIATION
-        // -------------------------
 
         const phonetic =
             entry.phonetic ||
@@ -85,79 +83,172 @@ async function searchWord() {
                 .find(item => item.text)?.text ||
             "Pronunciation unavailable";
 
-        phoneticElement.textContent = phonetic;
-
-
-        // -------------------------
-        // MEANING
-        // -------------------------
+        phoneticElement.textContent =
+            phonetic;
 
         const meaning =
             entry.meanings?.[0];
 
-        partOfSpeechElement.textContent =
+        const partOfSpeech =
             meaning?.partOfSpeech ||
             "Not available";
 
-        meaningElement.textContent =
+        partOfSpeechElement.textContent =
+            partOfSpeech;
+
+        const definition =
             meaning?.definitions?.[0]?.definition ||
             "No definition available.";
 
+        meaningElement.textContent =
+            definition;
 
-        // -------------------------
-        // SYNONYMS
-        // -------------------------
+        /* =========================
+           3. SYNONYMS
+        ========================== */
 
         const synonyms =
-            meaning?.synonyms || [];
+            meaning?.synonyms ||
+            entry.synonyms ||
+            [];
 
         synonymsElement.textContent =
             synonyms.length
                 ? synonyms.join(" · ")
                 : "No synonyms available.";
 
-
-        // -------------------------
-        // ANTONYMS
-        // -------------------------
+        /* =========================
+           4. ANTONYMS
+        ========================== */
 
         const antonyms =
-            meaning?.antonyms || [];
+            meaning?.antonyms ||
+            entry.antonyms ||
+            [];
 
         antonymsElement.textContent =
             antonyms.length
                 ? antonyms.join(" · ")
                 : "No antonyms available.";
 
-
-        // -------------------------
-        // EXAMPLE
-        // -------------------------
+        /* =========================
+           5. EXAMPLE
+        ========================== */
 
         const example =
             meaning?.definitions
                 ?.find(item => item.example)
-                ?.example;
-
-        exampleElement.textContent =
-            example ||
+                ?.example ||
             "No example available.";
 
+        exampleElement.textContent =
+            example;
 
-        // -------------------------
-        // ARMENIAN
-        // -------------------------
+
+        /* =========================
+           6. AI ARMENIAN TRANSLATION
+        ========================== */
 
         armenianElement.textContent =
-            "AI Armenian translation — coming next.";
+            "Translating with AI...";
 
         armenianExampleElement.textContent =
-            "AI Armenian example — coming next.";
+            "Creating Armenian example...";
 
 
-        // -------------------------
-        // SHOW RESULT
-        // -------------------------
+        try {
+
+            const translationResponse =
+                await fetch("/api/translate", {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        word: word,
+
+                        definition:
+                            definition,
+
+                        example:
+                            example
+
+                    })
+
+                });
+
+
+            if (!translationResponse.ok) {
+
+                throw new Error(
+                    "AI translation failed"
+                );
+
+            }
+
+
+            const translation =
+                await translationResponse.json();
+
+
+            /* Armenian word */
+
+            armenianElement.textContent =
+                translation.armenian ||
+                "Translation unavailable.";
+
+
+            /* Armenian example */
+
+            armenianExampleElement.textContent =
+                translation.armenianExample ||
+                "Example unavailable.";
+
+
+            /*
+             * If your HTML has a separate Armenian
+             * definition element, use it too.
+             */
+
+            const armenianDefinitionElement =
+                document.getElementById(
+                    "armenianDefinition"
+                );
+
+
+            if (armenianDefinitionElement) {
+
+                armenianDefinitionElement.textContent =
+                    translation.armenianDefinition ||
+                    "Definition unavailable.";
+
+            }
+
+
+        } catch (translationError) {
+
+            console.error(
+                "Lingora AI translation error:",
+                translationError
+            );
+
+            armenianElement.textContent =
+                "AI translation unavailable.";
+
+            armenianExampleElement.textContent =
+                "AI example unavailable.";
+
+        }
+
+
+        /* =========================
+           7. SHOW RESULT
+        ========================== */
 
         result.classList.remove("hidden");
 
@@ -194,21 +285,24 @@ async function searchWord() {
             alert(
                 "Something went wrong. Please try again."
             );
-        }
 
+        }
 
     } finally {
 
-        searchButton.textContent = "SEARCH";
-        searchButton.disabled = false;
+        searchButton.textContent =
+            "SEARCH";
+
+        searchButton.disabled =
+            false;
 
     }
 }
 
 
-// -------------------------
-// SEARCH BUTTON
-// -------------------------
+/* =========================
+   SEARCH BUTTON
+========================= */
 
 searchButton.addEventListener(
     "click",
@@ -216,9 +310,9 @@ searchButton.addEventListener(
 );
 
 
-// -------------------------
-// ENTER KEY
-// -------------------------
+/* =========================
+   ENTER KEY
+========================= */
 
 searchInput.addEventListener(
     "keydown",
