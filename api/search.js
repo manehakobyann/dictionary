@@ -17,172 +17,121 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           1. GET WIKTIONARY DATA
+           1. DATAMUSE
+           DEFINITION + PART OF SPEECH
         ========================== */
 
-        const response = await fetch(
-            "https://en.wiktionary.org/api/rest_v1/page/definition/" +
-            encodeURIComponent(word),
-            {
-                headers: {
-                    "User-Agent": "LingoraDictionary/1.0"
-                }
-            }
-        );
+        const dictionaryResponse =
+            await fetch(
+                `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
+            );
 
-        if (!response.ok) {
+        if (!dictionaryResponse.ok) {
+            throw new Error("Dictionary request failed");
+        }
+
+        const dictionaryData =
+            await dictionaryResponse.json();
+
+        if (!dictionaryData.length) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const data = await response.json();
+        const item =
+            dictionaryData[0];
 
-        const englishEntries =
-            data.en || [];
+        let partOfSpeech =
+            "word";
 
-        if (!englishEntries.length) {
-            return res.status(404).json({
-                error: "No English definition found"
-            });
+        let definition =
+            "Definition unavailable.";
+
+        if (item.defs?.length) {
+
+            const pieces =
+                item.defs[0].split("\t");
+
+            partOfSpeech =
+                pieces[0] || "word";
+
+            definition =
+                pieces
+                    .slice(1)
+                    .join("\t")
+                    .trim() ||
+                "Definition unavailable.";
         }
 
 
         /* =========================
-           2. CHOOSE MEANING
-           
-           Prefer noun when available.
-           Otherwise use the first
-           available meaning.
+           2. SYNONYMS
         ========================== */
 
-        let selectedEntry = null;
-        let selectedDefinition = null;
+        let synonyms = [];
 
-        const preferredPartsOfSpeech = [
-            "noun",
-            "verb",
-            "adjective",
-            "adverb",
-            "pronoun",
-            "preposition",
-            "conjunction",
-            "interjection"
-        ];
+        try {
 
-        for (
-            const preferredPOS
-            of preferredPartsOfSpeech
-        ) {
-
-            for (
-                const entry
-                of englishEntries
-            ) {
-
-                if (
-                    entry.partOfSpeech?.toLowerCase() ===
-                    preferredPOS &&
-                    entry.definitions?.length
-                ) {
-
-                    selectedEntry =
-                        entry;
-
-                    selectedDefinition =
-                        entry.definitions[0];
-
-                    break;
-                }
-            }
-
-            if (selectedEntry) {
-                break;
-            }
-        }
-
-
-        /* =========================
-           FALLBACK
-        ========================== */
-
-        if (!selectedEntry) {
-
-            selectedEntry =
-                englishEntries.find(
-                    entry =>
-                        entry.definitions?.length
+            const response =
+                await fetch(
+                    `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
                 );
 
-            selectedDefinition =
-                selectedEntry?.definitions?.[0];
+            const data =
+                await response.json();
+
+            synonyms =
+                data
+                    .map(item => item.word)
+                    .filter(Boolean)
+                    .filter(item =>
+                        item.toLowerCase() !==
+                        word.toLowerCase()
+                    );
+
+        } catch {
+
+            synonyms = [];
 
         }
 
 
-        if (!selectedDefinition) {
-            return res.status(404).json({
-                error:
-                    "Definition unavailable"
-            });
-        }
-
-
         /* =========================
-           3. DEFINITION
+           3. ANTONYMS
         ========================== */
 
-        const definition =
-            cleanText(
-                selectedDefinition.definition ||
-                "Definition unavailable."
-            );
+        let antonyms = [];
 
+        try {
 
-        /* =========================
-           4. EXAMPLE
-        ========================== */
-
-        let example = "";
-
-        if (
-            selectedDefinition.examples?.length
-        ) {
-
-            example =
-                cleanText(
-                    selectedDefinition.examples[0]
+            const response =
+                await fetch(
+                    `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
                 );
 
+            const data =
+                await response.json();
+
+            antonyms =
+                data
+                    .map(item => item.word)
+                    .filter(Boolean)
+                    .filter(item =>
+                        item.toLowerCase() !==
+                        word.toLowerCase()
+                    );
+
+        } catch {
+
+            antonyms = [];
+
         }
 
 
         /* =========================
-           5. SYNONYMS
-        ========================== */
-
-        const synonyms =
-            collectRelations(
-                englishEntries,
-                "synonyms"
-            );
-
-
-        /* =========================
-           6. ANTONYMS
-        ========================== */
-
-        const antonyms =
-            collectRelations(
-                englishEntries,
-                "antonyms"
-            );
-
-
-        /* =========================
-           7. PRONUNCIATION
-           
-           Wiktionary wikitext
+           4. WIKTIONARY
+           PRONUNCIATION ONLY
         ========================== */
 
         let phonetic = "";
@@ -206,9 +155,7 @@ export default async function handler(req, res) {
                     }
                 );
 
-            if (
-                pronunciationResponse.ok
-            ) {
+            if (pronunciationResponse.ok) {
 
                 const pronunciationData =
                     await pronunciationResponse.json();
@@ -230,13 +177,12 @@ export default async function handler(req, res) {
                 if (ipaMatch) {
 
                     phonetic =
-                        ipaMatch[1]
-                            .trim();
+                        ipaMatch[1].trim();
 
                 }
 
 
-                /* IPA symbols directly */
+                /* Direct IPA fallback */
 
                 if (!phonetic) {
 
@@ -251,30 +197,29 @@ export default async function handler(req, res) {
                             directIPA[0];
 
                     }
+
                 }
 
             }
 
-        } catch (
-            pronunciationError
-        ) {
+        } catch (error) {
 
-            console.error(
-                "Pronunciation error:",
-                pronunciationError
+            console.log(
+                "Pronunciation unavailable:",
+                error.message
             );
 
         }
 
 
         /* =========================
-           8. RESULT
+           5. RESULT
         ========================== */
 
         return res.status(200).json([{
 
             word:
-                word,
+                item.word || word,
 
             phonetic:
                 phonetic,
@@ -284,8 +229,7 @@ export default async function handler(req, res) {
             meanings: [{
 
                 partOfSpeech:
-                    selectedEntry.partOfSpeech ||
-                    "word",
+                    partOfSpeech,
 
                 definitions: [{
 
@@ -293,7 +237,7 @@ export default async function handler(req, res) {
                         definition,
 
                     example:
-                        example
+                        ""
 
                 }],
 
@@ -328,132 +272,4 @@ export default async function handler(req, res) {
                 error.message
         });
     }
-}
-
-
-/* =========================
-   CLEAN TEXT
-========================= */
-
-function cleanText(text) {
-
-    return String(text)
-
-        .replace(
-            /<[^>]*>/g,
-            ""
-        )
-
-        .replace(
-            /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
-            "$2"
-        )
-
-        .replace(
-            /\[\[([^\]]+)\]\]/g,
-            "$1"
-        )
-
-        .replace(
-            /&nbsp;/g,
-            " "
-        )
-
-        .replace(
-            /&amp;/g,
-            "&"
-        )
-
-        .replace(
-            /&quot;/g,
-            '"'
-        )
-
-        .replace(
-            /&#39;/g,
-            "'"
-        )
-
-        .trim();
-}
-
-
-/* =========================
-   COLLECT SYNONYMS /
-   ANTONYMS
-========================= */
-
-function collectRelations(
-    entries,
-    type
-) {
-
-    const results = [];
-
-    for (
-        const entry
-        of entries
-    ) {
-
-        for (
-            const definition
-            of entry.definitions || []
-        ) {
-
-            const relations =
-                definition[type];
-
-            if (
-                !Array.isArray(relations)
-            ) {
-                continue;
-            }
-
-            for (
-                const relation
-                of relations
-            ) {
-
-                let value = "";
-
-                if (
-                    typeof relation ===
-                    "string"
-                ) {
-
-                    value =
-                        cleanText(
-                            relation
-                        );
-
-                } else if (
-                    relation?.word
-                ) {
-
-                    value =
-                        cleanText(
-                            relation.word
-                        );
-
-                } else if (
-                    relation?.text
-                ) {
-
-                    value =
-                        cleanText(
-                            relation.text
-                        );
-
-                }
-
-                if (value) {
-                    results.push(value);
-                }
-            }
-        }
-    }
-
-    return [
-        ...new Set(results)
-    ].slice(0, 8);
 }
