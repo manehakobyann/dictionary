@@ -14,15 +14,22 @@ export default async function handler(req, res) {
         });
     }
 
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+        controller.abort();
+    }, 8000);
+
     try {
 
-        /* =========================
-           FREE DICTIONARY API
-        ========================== */
-
         const response = await fetch(
-            `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
+            `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+            {
+                signal: controller.signal
+            }
         );
+
+        clearTimeout(timeout);
 
         if (!response.ok) {
 
@@ -32,151 +39,96 @@ export default async function handler(req, res) {
                 });
             }
 
-            return res.status(500).json({
-                error: "Dictionary service unavailable"
+            return res.status(502).json({
+                error: "Dictionary API error"
             });
         }
 
         const data = await response.json();
 
-        if (!data || !data.length) {
+        if (!Array.isArray(data) || !data.length) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-
-        /* =========================
-           MAIN ENTRY
-        ========================== */
-
         const entry = data[0];
 
-        const meanings =
-            entry.meanings || [];
+        const meanings = entry.meanings || [];
 
-        if (!meanings.length) {
-            return res.status(404).json({
-                error: "No definitions available"
-            });
-        }
-
-
-        /* =========================
-           USE FIRST MEANING
-        ========================== */
-
-        const meaning =
-            meanings[0];
+        const meaning = meanings[0] || {};
 
         const definitions =
             meaning.definitions || [];
 
-        const firstDefinition =
+        const definition =
             definitions[0] || {};
-
-
-        /* =========================
-           PRONUNCIATION
-        ========================== */
 
         const phonetic =
             entry.phonetic ||
-            entry.phonetics
-                ?.find(item => item.text)
-                ?.text ||
+            entry.phonetics?.find(
+                item => item.text
+            )?.text ||
             "";
-
-
-        /* =========================
-           AUDIO
-        ========================== */
 
         const audio =
-            entry.phonetics
-                ?.find(item => item.audio)
-                ?.audio ||
+            entry.phonetics?.find(
+                item => item.audio
+            )?.audio ||
             "";
 
+        const synonyms = [
+            ...(definition.synonyms || []),
+            ...(meaning.synonyms || [])
+        ];
 
-        /* =========================
-           SYNONYMS
-        ========================== */
+        const antonyms = [
+            ...(definition.antonyms || []),
+            ...(meaning.antonyms || [])
+        ];
 
-        const synonyms =
-            firstDefinition.synonyms ||
-            meaning.synonyms ||
-            [];
+        const cleanSynonyms = [
+            ...new Set(
+                synonyms.filter(Boolean)
+            )
+        ].slice(0, 8);
 
-        const cleanSynonyms =
-            [...new Set(
-                synonyms
-                    .filter(Boolean)
-                    .filter(item =>
-                        item.toLowerCase() !==
-                        word.toLowerCase()
-                    )
-            )].slice(0, 8);
+        const cleanAntonyms = [
+            ...new Set(
+                antonyms.filter(Boolean)
+            )
+        ].slice(0, 8);
 
+        return res.status(200).json([{
 
-        /* =========================
-           ANTONYMS
-        ========================== */
-
-        const antonyms =
-            firstDefinition.antonyms ||
-            meaning.antonyms ||
-            [];
-
-        const cleanAntonyms =
-            [...new Set(
-                antonyms
-                    .filter(Boolean)
-                    .filter(item =>
-                        item.toLowerCase() !==
-                        word.toLowerCase()
-                    )
-            )].slice(0, 8);
-
-
-        /* =========================
-           EXAMPLE
-        ========================== */
-
-        const example =
-            firstDefinition.example ||
-            "";
-
-
-        /* =========================
-           FINAL RESPONSE
-        ========================== */
-
-        const result = [{
             word:
                 entry.word || word,
 
             phonetic:
                 phonetic,
 
-            phonetics:
-                entry.phonetics || [],
-
             audio:
                 audio,
 
+            phonetics:
+                entry.phonetics || [],
+
             meanings: [{
+
                 partOfSpeech:
                     meaning.partOfSpeech ||
                     "word",
 
                 definitions: [{
+
                     definition:
-                        firstDefinition.definition ||
+                        definition.definition ||
                         "Definition unavailable.",
 
                     example:
-                        example
+                        definition.example ||
+                        ""
+
                 }],
 
                 synonyms:
@@ -184,6 +136,7 @@ export default async function handler(req, res) {
 
                 antonyms:
                     cleanAntonyms
+
             }],
 
             synonyms:
@@ -191,18 +144,23 @@ export default async function handler(req, res) {
 
             antonyms:
                 cleanAntonyms
-        }];
 
-
-        return res.status(200).json(result);
-
+        }]);
 
     } catch (error) {
+
+        clearTimeout(timeout);
 
         console.error(
             "Lingora dictionary error:",
             error
         );
+
+        if (error.name === "AbortError") {
+            return res.status(504).json({
+                error: "Dictionary API timeout"
+            });
+        }
 
         return res.status(500).json({
             error: "Dictionary service unavailable"
