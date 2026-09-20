@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           GET MAIN DEFINITION
+           DATAMUSE — DEFINITION
         ========================= */
 
         const dictionaryResponse = await fetch(
@@ -128,19 +128,11 @@ export default async function handler(req, res) {
 
 
                 /* =========================
-                   ENGLISH SECTION
-                ========================= */
-
-                const englishSection =
-                    getEnglishSection(wikitext);
-
-
-                /* =========================
                    PRONUNCIATION
                 ========================= */
 
                 const ipaMatches = [
-                    ...englishSection.matchAll(
+                    ...wikitext.matchAll(
                         /\{\{IPA\|(?:en\|)?([^|}\n]+)/gi
                     )
                 ];
@@ -149,18 +141,18 @@ export default async function handler(req, res) {
 
                     phonetic =
                         ipaMatches[0][1].trim();
-
                 }
 
 
                 if (!phonetic) {
 
                     const directIPA =
-                        englishSection.match(
+                        wikitext.match(
                             /\/[^\/\n]{2,40}\//
                         );
 
                     if (directIPA) {
+
                         phonetic =
                             directIPA[0];
                     }
@@ -168,21 +160,19 @@ export default async function handler(req, res) {
 
 
                 /* =========================
-                   CORRECT POS SECTION
+                   FIND EXACT POS SECTION
                 ========================= */
 
                 const posSection =
                     getPOSSection(
-                        englishSection,
+                        wikitext,
                         formattedPartOfSpeech
                     );
 
 
                 if (posSection) {
 
-                    /* =========================
-                       EXAMPLE
-                    ========================= */
+                    /* EXAMPLE */
 
                     example =
                         extractExample(
@@ -190,9 +180,7 @@ export default async function handler(req, res) {
                         );
 
 
-                    /* =========================
-                       SYNONYMS
-                    ========================= */
+                    /* SYNONYMS */
 
                     synonyms =
                         extractSubsectionList(
@@ -201,9 +189,7 @@ export default async function handler(req, res) {
                         );
 
 
-                    /* =========================
-                       ANTONYMS
-                    ========================= */
+                    /* ANTONYMS */
 
                     antonyms =
                         extractSubsectionList(
@@ -212,15 +198,12 @@ export default async function handler(req, res) {
                         );
 
 
-                    /* =========================
-                       ARMENIAN TRANSLATIONS
-                    ========================= */
+                    /* ARMENIAN */
 
                     armenianTranslations =
                         extractArmenianTranslations(
                             posSection
                         );
-
                 }
 
             }
@@ -228,10 +211,9 @@ export default async function handler(req, res) {
         } catch (error) {
 
             console.log(
-                "Wiktionary data unavailable:",
+                "Wiktionary error:",
                 error.message
             );
-
         }
 
 
@@ -299,51 +281,29 @@ export default async function handler(req, res) {
                 error.message
 
         });
-
     }
-
 }
 
 
 /* ==================================================
-   GET ENGLISH SECTION
-================================================== */
-
-function getEnglishSection(wikitext) {
-
-    const match =
-        wikitext.match(
-            /^==English==([\s\S]*?)(?=^==[^=]|$)/im
-        );
-
-    return match
-        ? match[1]
-        : wikitext;
-}
-
-
-/* ==================================================
-   GET EXACT PART OF SPEECH SECTION
+   FIND EXACT PART OF SPEECH
 ================================================== */
 
 function getPOSSection(
-    englishSection,
+    wikitext,
     partOfSpeech
 ) {
 
-    const heading =
-        partOfSpeech;
-
     const pattern =
         new RegExp(
-            "^===" +
-            escapeRegExp(heading) +
-            "===([\\s\\S]*?)(?=^===[^=]|$)",
+            "^===\\s*" +
+            escapeRegExp(partOfSpeech) +
+            "\\s*===\\s*([\\s\\S]*?)(?=^===\\s*[^=]|^==\\s*[^=]|$)",
             "im"
         );
 
     const match =
-        englishSection.match(pattern);
+        wikitext.match(pattern);
 
     return match
         ? match[1]
@@ -352,7 +312,7 @@ function getPOSSection(
 
 
 /* ==================================================
-   EXTRACT FIRST REAL EXAMPLE
+   EXTRACT EXAMPLE
 ================================================== */
 
 function extractExample(section) {
@@ -365,11 +325,6 @@ function extractExample(section) {
         const trimmed =
             line.trim();
 
-        /*
-         * Wiktionary examples normally begin
-         * with #* or #:
-         */
-
         if (
             trimmed.startsWith("#*") ||
             trimmed.startsWith("#:")
@@ -377,16 +332,12 @@ function extractExample(section) {
 
             let example =
                 trimmed
-                    .replace(/^#\*+/, "")
-                    .replace(/^#:+/, "")
+                    .replace(/^#\*+\s*/, "")
+                    .replace(/^#:+\s*/, "")
                     .trim();
 
             example =
                 cleanText(example);
-
-            /*
-             * Ignore citation-only lines.
-             */
 
             if (
                 example &&
@@ -404,7 +355,7 @@ function extractExample(section) {
 
 
 /* ==================================================
-   EXTRACT SYNONYMS / ANTONYMS
+   SYNONYMS / ANTONYMS
 ================================================== */
 
 function extractSubsectionList(
@@ -414,9 +365,9 @@ function extractSubsectionList(
 
     const pattern =
         new RegExp(
-            "^====" +
+            "^====\\s*" +
             escapeRegExp(heading) +
-            "====([\\s\\S]*?)(?=^====|^===|$)",
+            "\\s*====\\s*([\\s\\S]*?)(?=^====\\s*[^=]|^===\\s*[^=]|$)",
             "im"
         );
 
@@ -432,37 +383,24 @@ function extractSubsectionList(
 
     const results = [];
 
-    const lines =
-        subsection.split("\n");
+    const links =
+        [
+            ...subsection.matchAll(
+                /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
+            )
+        ];
 
-    for (const line of lines) {
+    for (const link of links) {
 
-        const trimmed =
-            line.trim();
+        const value =
+            cleanText(link[1]);
 
-        if (!trimmed.startsWith("*")) {
-            continue;
-        }
+        if (
+            value &&
+            !results.includes(value)
+        ) {
 
-        const links =
-            [
-                ...trimmed.matchAll(
-                    /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
-                )
-            ];
-
-        for (const link of links) {
-
-            const value =
-                link[1].trim();
-
-            if (
-                value &&
-                !results.includes(value)
-            ) {
-
-                results.push(value);
-            }
+            results.push(value);
         }
     }
 
@@ -471,54 +409,41 @@ function extractSubsectionList(
 
 
 /* ==================================================
-   EXTRACT ARMENIAN TRANSLATIONS
+   ARMENIAN TRANSLATIONS
 ================================================== */
 
 function extractArmenianTranslations(
     section
 ) {
 
-    const translationHeading =
-        section.match(
-            /^====Translations====([\s\S]*?)(?=^====|^===|$)/im
-        );
+    const pattern =
+        /^====\s*Translations\s*====\s*([\s\S]*?)(?=^====\s*[^=]|^===\s*[^=]|$)/im;
 
-    if (!translationHeading) {
+    const match =
+        section.match(pattern);
+
+    if (!match) {
         return [];
     }
 
     const translationSection =
-        translationHeading[1];
-
-    const armenianLine =
-        translationSection.match(
-            /^\*\s*Armenian:\s*(.+)$/im
-        );
-
-    if (!armenianLine) {
-        return [];
-    }
-
-    const line =
-        armenianLine[1];
+        match[1];
 
     const results = [];
 
-    /*
-     * Handles:
-     *
-     * {{t|hy|ազգական}}
-     * {{t+|hy|ազգական}}
-     * {{tt|hy|ազգական}}
-     */
 
-    const templateMatches = [
-        ...line.matchAll(
+    /* =========================
+       {{t|hy|word}}
+       {{t+|hy|word}}
+       ========================= */
+
+    const templates = [
+        ...translationSection.matchAll(
             /\{\{t\+?\+?\|hy\|([^}|]+)/gi
         )
     ];
 
-    for (const match of templateMatches) {
+    for (const match of templates) {
 
         const value =
             cleanText(match[1]);
@@ -533,29 +458,37 @@ function extractArmenianTranslations(
     }
 
 
-    /*
-     * Fallback for normal Wiktionary links.
-     */
+    /* =========================
+       ARMENIAN LINE FALLBACK
+    ========================= */
 
     if (!results.length) {
 
-        const links = [
-            ...line.matchAll(
-                /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
-            )
-        ];
+        const armenianLine =
+            translationSection.match(
+                /^\*\s*Armenian:\s*(.+)$/im
+            );
 
-        for (const link of links) {
+        if (armenianLine) {
 
-            const value =
-                cleanText(link[1]);
+            const links = [
+                ...armenianLine[1].matchAll(
+                    /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
+                )
+            ];
 
-            if (
-                value &&
-                !results.includes(value)
-            ) {
+            for (const link of links) {
 
-                results.push(value);
+                const value =
+                    cleanText(link[1]);
+
+                if (
+                    value &&
+                    !results.includes(value)
+                ) {
+
+                    results.push(value);
+                }
             }
         }
     }
@@ -566,21 +499,17 @@ function extractArmenianTranslations(
 
 
 /* ==================================================
-   CLEAN WIKITEXT
+   CLEAN TEXT
 ================================================== */
 
 function cleanText(text) {
 
     return String(text)
 
-        /* Remove templates */
-
         .replace(
             /\{\{[^{}]*\}\}/g,
             ""
         )
-
-        /* Wiki links */
 
         .replace(
             /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
@@ -592,14 +521,10 @@ function cleanText(text) {
             "$1"
         )
 
-        /* HTML */
-
         .replace(
             /<[^>]*>/g,
             ""
         )
-
-        /* Quotes */
 
         .replace(
             /'''/g,
@@ -610,8 +535,6 @@ function cleanText(text) {
             /''/g,
             ""
         )
-
-        /* HTML entities */
 
         .replace(
             /&nbsp;/g,
