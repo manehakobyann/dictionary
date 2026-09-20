@@ -16,42 +16,73 @@ export default async function handler(req, res) {
 
     try {
 
-        const response = await fetch(
-            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dpsf&max=1`
+        // Get definition + part of speech
+        const definitionResponse = await fetch(
+            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
         );
 
-        if (!response.ok) {
-            return res.status(500).json({
-                error: "Dictionary service unavailable"
-            });
-        }
+        const definitionData =
+            await definitionResponse.json();
 
-        const data = await response.json();
+        // Get synonyms
+        const synonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
+        );
 
-        if (!data.length) {
+        const synonymData =
+            await synonymResponse.json();
+
+        // Get antonyms
+        const antonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
+        );
+
+        const antonymData =
+            await antonymResponse.json();
+
+        if (!definitionData.length) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const item = data[0];
+        const item = definitionData[0];
 
         const definitions = item.defs || [];
 
-        const firstDefinition =
-            definitions.length
-                ? definitions[0].replace(/^[^\t]+\t/, "")
-                : "Definition unavailable.";
+        let partOfSpeech = "word";
+        let definition = "Definition unavailable.";
 
-        const partOfSpeech =
-            definitions.length
-                ? definitions[0].split("\t")[0]
-                : "word";
+        if (definitions.length) {
+
+            const first = definitions[0];
+
+            const pieces = first.split("\t");
+
+            partOfSpeech = pieces[0] || "word";
+
+            definition =
+                pieces.slice(1).join("\t") ||
+                "Definition unavailable.";
+        }
+
+        const synonyms =
+            synonymData
+                .map(item => item.word)
+                .filter(Boolean);
+
+        const antonyms =
+            antonymData
+                .map(item => item.word)
+                .filter(Boolean);
 
         const result = [{
             word: word,
 
-            phonetic: "",
+            phonetic:
+                item.tags?.find(tag =>
+                    tag.startsWith("pron:")
+                )?.replace("pron:", "") || "",
 
             phonetics: [],
 
@@ -59,18 +90,18 @@ export default async function handler(req, res) {
                 partOfSpeech: partOfSpeech,
 
                 definitions: [{
-                    definition: firstDefinition,
+                    definition: definition,
                     example: ""
                 }],
 
-                synonyms: [],
+                synonyms: synonyms,
 
-                antonyms: []
+                antonyms: antonyms
             }],
 
-            synonyms: [],
+            synonyms: synonyms,
 
-            antonyms: []
+            antonyms: antonyms
         }];
 
         return res.status(200).json(result);
