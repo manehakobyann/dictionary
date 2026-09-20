@@ -16,9 +16,19 @@ export default async function handler(req, res) {
 
     try {
 
+        /* =========================
+           WIKTIONARY
+        ========================== */
+
         const response = await fetch(
             "https://en.wiktionary.org/api/rest_v1/page/definition/" +
-            encodeURIComponent(word)
+            encodeURIComponent(word),
+            {
+                headers: {
+                    "User-Agent":
+                        "LingoraDictionary/1.0"
+                }
+            }
         );
 
         if (!response.ok) {
@@ -27,103 +37,142 @@ export default async function handler(req, res) {
             });
         }
 
-        const data = await response.json();
-
-        const entries = [];
-
-        /* =========================
-           READ WIKTIONARY DATA
-        ========================== */
-
-        for (const language in data) {
-
-            if (
-                language.toLowerCase() !==
-                "english"
-            ) {
-                continue;
-            }
-
-            const sections =
-                data[language] || [];
-
-            for (const section of sections) {
-
-                const partOfSpeech =
-                    section.partOfSpeech ||
-                    "word";
-
-                const definitions =
-                    section.definitions || [];
-
-                for (
-                    const definitionItem
-                    of definitions
-                ) {
-
-                    const definition =
-                        typeof definitionItem === "string"
-                            ? definitionItem
-                            : definitionItem.definition;
-
-                    if (!definition) {
-                        continue;
-                    }
-
-                    entries.push({
-
-                        partOfSpeech:
-                            partOfSpeech,
-
-                        definition:
-                            cleanText(definition),
-
-                        example:
-                            extractExample(
-                                definitionItem
-                            ),
-
-                        synonyms:
-                            extractRelations(
-                                definitionItem,
-                                "synonyms"
-                            ),
-
-                        antonyms:
-                            extractRelations(
-                                definitionItem,
-                                "antonyms"
-                            )
-
-                    });
-
-                }
-
-            }
-
-        }
+        const data =
+            await response.json();
 
 
         /* =========================
-           IF NOTHING FOUND
+           ENGLISH ENTRIES
         ========================== */
 
-        if (!entries.length) {
+        const englishEntries =
+            data.en || [];
 
+        if (!englishEntries.length) {
             return res.status(404).json({
                 error:
                     "No English definition found"
             });
+        }
+
+
+        /* =========================
+           FIND USEFUL ENTRY
+        ========================== */
+
+        let selectedEntry =
+            englishEntries[0];
+
+        let selectedDefinition =
+            selectedEntry.definitions?.[0];
+
+        for (
+            const entry of englishEntries
+        ) {
+
+            if (
+                entry.definitions &&
+                entry.definitions.length
+            ) {
+
+                selectedEntry =
+                    entry;
+
+                selectedDefinition =
+                    entry.definitions[0];
+
+                break;
+            }
+        }
+
+
+        /* =========================
+           DEFINITION
+        ========================== */
+
+        const definition =
+            cleanText(
+                selectedDefinition?.definition ||
+                "Definition unavailable."
+            );
+
+
+        /* =========================
+           EXAMPLE
+        ========================== */
+
+        let example = "";
+
+        if (
+            selectedDefinition?.examples &&
+            selectedDefinition.examples.length
+        ) {
+
+            example =
+                cleanText(
+                    selectedDefinition.examples[0]
+                );
 
         }
 
 
         /* =========================
-           USE FIRST GOOD ENTRY
+           COLLECT ALL EXAMPLES
         ========================== */
 
-        const entry =
-            entries[0];
+        if (!example) {
+
+            for (
+                const entry of englishEntries
+            ) {
+
+                for (
+                    const def
+                    of entry.definitions || []
+                ) {
+
+                    if (
+                        def.examples &&
+                        def.examples.length
+                    ) {
+
+                        example =
+                            cleanText(
+                                def.examples[0]
+                            );
+
+                        break;
+                    }
+
+                }
+
+                if (example) {
+                    break;
+                }
+            }
+        }
+
+
+        /* =========================
+           SYNONYMS
+        ========================== */
+
+        const synonyms =
+            collectRelations(
+                englishEntries,
+                "synonyms"
+            );
+
+
+        /* =========================
+           ANTONYMS
+        ========================== */
+
+        const antonyms =
+            collectRelations(
+                englishEntries,
+                "antonyms"
+            );
 
 
         /* =========================
@@ -144,143 +193,173 @@ export default async function handler(req, res) {
             meanings: [{
 
                 partOfSpeech:
-                    entry.partOfSpeech,
+                    selectedEntry.partOfSpeech ||
+                    "word",
 
                 definitions: [{
 
                     definition:
-                        entry.definition,
+                        definition,
 
                     example:
-                        entry.example
+                        example
 
                 }],
 
                 synonyms:
-                    entry.synonyms,
+                    synonyms,
 
                 antonyms:
-                    entry.antonyms
+                    antonyms
 
             }],
 
             synonyms:
-                entry.synonyms,
+                synonyms,
 
             antonyms:
-                entry.antonyms
+                antonyms
 
         }]);
 
     } catch (error) {
 
         console.error(
-            "Wiktionary error:",
+            "Lingora search error:",
             error
         );
 
         return res.status(500).json({
             error:
-                "Dictionary service unavailable"
+                "Dictionary service unavailable",
+
+            details:
+                error.message
         });
     }
 }
 
 
 /* =========================
-   CLEAN TEXT
+   CLEAN WIKTIONARY HTML
 ========================= */
 
 function cleanText(text) {
 
     return String(text)
-        .replace(/<[^>]*>/g, "")
-        .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
-        .replace(/\[\[([^\]]+)\]\]/g, "$1")
-        .replace(/&nbsp;/g, " ")
+
+        .replace(
+            /<[^>]*>/g,
+            ""
+        )
+
+        .replace(
+            /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
+            "$2"
+        )
+
+        .replace(
+            /\[\[([^\]]+)\]\]/g,
+            "$1"
+        )
+
+        .replace(
+            /&nbsp;/g,
+            " "
+        )
+
+        .replace(
+            /&amp;/g,
+            "&"
+        )
+
+        .replace(
+            /&quot;/g,
+            '"'
+        )
+
+        .replace(
+            /&#39;/g,
+            "'"
+        )
+
         .trim();
-
 }
 
 
 /* =========================
-   EXTRACT EXAMPLE
+   RELATIONS
 ========================= */
 
-function extractExample(item) {
-
-    if (!item) {
-        return "";
-    }
-
-    if (typeof item === "object") {
-
-        if (item.example) {
-            return cleanText(
-                item.example
-            );
-        }
-
-        if (item.examples?.length) {
-
-            const first =
-                item.examples[0];
-
-            if (typeof first === "string") {
-                return cleanText(first);
-            }
-
-            if (first?.text) {
-                return cleanText(first.text);
-            }
-
-        }
-
-    }
-
-    return "";
-}
-
-
-/* =========================
-   EXTRACT SYNONYMS /
-   ANTONYMS
-========================= */
-
-function extractRelations(
-    item,
+function collectRelations(
+    entries,
     type
 ) {
 
-    if (!item || typeof item !== "object") {
-        return [];
+    const results = [];
+
+    for (
+        const entry of entries
+    ) {
+
+        for (
+            const definition
+            of entry.definitions || []
+        ) {
+
+            const relations =
+                definition[type];
+
+            if (
+                Array.isArray(relations)
+            ) {
+
+                for (
+                    const relation
+                    of relations
+                ) {
+
+                    let value = "";
+
+                    if (
+                        typeof relation ===
+                        "string"
+                    ) {
+
+                        value =
+                            cleanText(
+                                relation
+                            );
+
+                    } else if (
+                        relation?.word
+                    ) {
+
+                        value =
+                            cleanText(
+                                relation.word
+                            );
+
+                    } else if (
+                        relation?.text
+                    ) {
+
+                        value =
+                            cleanText(
+                                relation.text
+                            );
+                    }
+
+                    if (value) {
+                        results.push(value);
+                    }
+                }
+            }
+        }
     }
 
-    const relations =
-        item[type];
 
-    if (!Array.isArray(relations)) {
-        return [];
-    }
-
-    return relations
-        .map(item => {
-
-            if (typeof item === "string") {
-                return cleanText(item);
-            }
-
-            if (item?.word) {
-                return cleanText(item.word);
-            }
-
-            if (item?.text) {
-                return cleanText(item.text);
-            }
-
-            return "";
-
-        })
-        .filter(Boolean)
-        .slice(0, 8);
+    return [
+        ...new Set(results)
+    ].slice(0, 8);
 }
