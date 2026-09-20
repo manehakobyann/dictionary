@@ -6,7 +6,7 @@ export default async function handler(req, res) {
         });
     }
 
-    const word = req.query.word?.trim().toLowerCase();
+    const word = req.query.word?.trim();
 
     if (!word) {
         return res.status(400).json({
@@ -16,265 +16,166 @@ export default async function handler(req, res) {
 
     try {
 
-        /* =========================
-           DATAMUSE
-        ========================== */
-
         const response = await fetch(
-            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
+            "https://en.wiktionary.org/api/rest_v1/page/definition/" +
+            encodeURIComponent(word)
         );
 
-        const data = await response.json();
-
-        if (!data.length) {
+        if (!response.ok) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const item = data[0];
+        const data = await response.json();
 
-        const definitions = item.defs || [];
-
-        let partOfSpeech = "word";
-        let definition = "Definition unavailable.";
-
-        if (definitions.length) {
-
-            const pieces =
-                definitions[0].split("\t");
-
-            partOfSpeech =
-                pieces[0] || "word";
-
-            definition =
-                pieces.slice(1).join("\t") ||
-                "Definition unavailable.";
-        }
-
+        const entries = [];
 
         /* =========================
-           SYNONYMS
+           READ WIKTIONARY DATA
         ========================== */
 
-        const synonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
-        );
+        for (const language in data) {
 
-        const synonymData =
-            await synonymResponse.json();
+            if (
+                language.toLowerCase() !==
+                "english"
+            ) {
+                continue;
+            }
 
-        let synonyms =
-            synonymData
-                .map(item => item.word)
-                .filter(Boolean)
-                .filter(item =>
-                    item.toLowerCase() !== word
-                );
+            const sections =
+                data[language] || [];
 
+            for (const section of sections) {
 
-        /* =========================
-           ANTONYMS
-        ========================== */
+                const partOfSpeech =
+                    section.partOfSpeech ||
+                    "word";
 
-        const antonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
-        );
+                const definitions =
+                    section.definitions || [];
 
-        const antonymData =
-            await antonymResponse.json();
+                for (
+                    const definitionItem
+                    of definitions
+                ) {
 
-        let antonyms =
-            antonymData
-                .map(item => item.word)
-                .filter(Boolean);
+                    const definition =
+                        typeof definitionItem === "string"
+                            ? definitionItem
+                            : definitionItem.definition;
 
+                    if (!definition) {
+                        continue;
+                    }
 
-        /* =========================
-           ANTONYM FALLBACK
-        ========================== */
+                    entries.push({
 
-        const antonymDictionary = {
+                        partOfSpeech:
+                            partOfSpeech,
 
-            happy: ["sad", "unhappy"],
-            sad: ["happy", "cheerful"],
-            good: ["bad", "evil"],
-            bad: ["good"],
-            big: ["small", "little"],
-            small: ["big", "large"],
-            beautiful: ["ugly"],
-            ugly: ["beautiful"],
-            hot: ["cold"],
-            cold: ["hot"],
-            fast: ["slow"],
-            slow: ["fast"],
-            easy: ["difficult", "hard"],
-            difficult: ["easy"],
-            hard: ["easy", "soft"],
-            soft: ["hard"],
-            rich: ["poor"],
-            poor: ["rich"],
-            young: ["old"],
-            old: ["young"],
-            new: ["old"],
-            clean: ["dirty"],
-            dirty: ["clean"],
-            light: ["dark", "heavy"],
-            dark: ["light"],
-            strong: ["weak"],
-            weak: ["strong"],
-            early: ["late"],
-            late: ["early"],
-            open: ["closed"],
-            closed: ["open"],
-            full: ["empty"],
-            empty: ["full"],
-            true: ["false"],
-            false: ["true"],
-            right: ["wrong"],
-            wrong: ["right"],
-            love: ["hate"],
-            hate: ["love"],
-            friend: ["enemy"],
-            enemy: ["friend"],
-            success: ["failure"],
-            failure: ["success"],
-            win: ["lose"],
-            lose: ["win"],
-            start: ["finish", "end"],
-            finish: ["start"],
-            end: ["beginning"],
-            beginning: ["end"],
-            increase: ["decrease"],
-            decrease: ["increase"],
-            high: ["low"],
-            low: ["high"],
-            near: ["far"],
-            far: ["near"],
-            inside: ["outside"],
-            outside: ["inside"],
-            above: ["below"],
-            below: ["above"],
-            before: ["after"],
-            after: ["before"],
-            always: ["never"],
-            never: ["always"]
-        };
+                        definition:
+                            cleanText(definition),
 
+                        example:
+                            extractExample(
+                                definitionItem
+                            ),
 
-        if (!antonyms.length) {
+                        synonyms:
+                            extractRelations(
+                                definitionItem,
+                                "synonyms"
+                            ),
 
-            antonyms =
-                antonymDictionary[word] || [];
+                        antonyms:
+                            extractRelations(
+                                definitionItem,
+                                "antonyms"
+                            )
+
+                    });
+
+                }
+
+            }
 
         }
 
 
         /* =========================
-           EXAMPLES
+           IF NOTHING FOUND
         ========================== */
 
-        const exampleDictionary = {
+        if (!entries.length) {
 
-            house:
-                "They bought a beautiful house.",
+            return res.status(404).json({
+                error:
+                    "No English definition found"
+            });
 
-            happy:
-                "She felt happy after hearing the good news.",
-
-            sad:
-                "He was sad when his friend left.",
-
-            beautiful:
-                "She wore a beautiful dress.",
-
-            big:
-                "They live in a big house.",
-
-            small:
-                "She has a small dog.",
-
-            good:
-                "He is a good student.",
-
-            bad:
-                "It was a bad decision.",
-
-            love:
-                "I love spending time with my family.",
-
-            friend:
-                "My friend helped me with my homework.",
-
-            family:
-                "My family lives in Armenia.",
-
-            school:
-                "She goes to school every morning.",
-
-            book:
-                "I am reading an interesting book.",
-
-            water:
-                "She drank a glass of water."
-        };
-
-
-        const example =
-            exampleDictionary[word] || "";
+        }
 
 
         /* =========================
-           FINAL RESULT
+           USE FIRST GOOD ENTRY
+        ========================== */
+
+        const entry =
+            entries[0];
+
+
+        /* =========================
+           RESULT
         ========================== */
 
         return res.status(200).json([{
 
             word:
-                item.word || word,
+                word,
 
             phonetic:
-                item.tags?.find(tag =>
-                    tag.startsWith("pron:")
-                )?.replace("pron:", "") || "",
+                "",
 
-            phonetics: [],
+            phonetics:
+                [],
 
             meanings: [{
 
                 partOfSpeech:
-                    partOfSpeech,
+                    entry.partOfSpeech,
 
                 definitions: [{
 
                     definition:
-                        definition,
+                        entry.definition,
 
                     example:
-                        example
+                        entry.example
 
                 }],
 
                 synonyms:
-                    synonyms,
+                    entry.synonyms,
 
                 antonyms:
-                    antonyms
+                    entry.antonyms
 
             }],
 
             synonyms:
-                synonyms,
+                entry.synonyms,
 
             antonyms:
-                antonyms
+                entry.antonyms
 
         }]);
 
     } catch (error) {
 
         console.error(
-            "Lingora dictionary error:",
+            "Wiktionary error:",
             error
         );
 
@@ -283,4 +184,103 @@ export default async function handler(req, res) {
                 "Dictionary service unavailable"
         });
     }
+}
+
+
+/* =========================
+   CLEAN TEXT
+========================= */
+
+function cleanText(text) {
+
+    return String(text)
+        .replace(/<[^>]*>/g, "")
+        .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+        .replace(/\[\[([^\]]+)\]\]/g, "$1")
+        .replace(/&nbsp;/g, " ")
+        .trim();
+
+}
+
+
+/* =========================
+   EXTRACT EXAMPLE
+========================= */
+
+function extractExample(item) {
+
+    if (!item) {
+        return "";
+    }
+
+    if (typeof item === "object") {
+
+        if (item.example) {
+            return cleanText(
+                item.example
+            );
+        }
+
+        if (item.examples?.length) {
+
+            const first =
+                item.examples[0];
+
+            if (typeof first === "string") {
+                return cleanText(first);
+            }
+
+            if (first?.text) {
+                return cleanText(first.text);
+            }
+
+        }
+
+    }
+
+    return "";
+}
+
+
+/* =========================
+   EXTRACT SYNONYMS /
+   ANTONYMS
+========================= */
+
+function extractRelations(
+    item,
+    type
+) {
+
+    if (!item || typeof item !== "object") {
+        return [];
+    }
+
+    const relations =
+        item[type];
+
+    if (!Array.isArray(relations)) {
+        return [];
+    }
+
+    return relations
+        .map(item => {
+
+            if (typeof item === "string") {
+                return cleanText(item);
+            }
+
+            if (item?.word) {
+                return cleanText(item.word);
+            }
+
+            if (item?.text) {
+                return cleanText(item.text);
+            }
+
+            return "";
+
+        })
+        .filter(Boolean)
+        .slice(0, 8);
 }
