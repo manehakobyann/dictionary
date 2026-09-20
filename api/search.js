@@ -6,7 +6,7 @@ export default async function handler(req, res) {
         });
     }
 
-    const word = req.query.word?.trim();
+    const word = req.query.word?.trim().toLowerCase();
 
     if (!word) {
         return res.status(400).json({
@@ -58,9 +58,10 @@ export default async function handler(req, res) {
            SYNONYMS
         ========================== */
 
-        const synonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
-        );
+        const synonymResponse =
+            await fetch(
+                `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
+            );
 
         const synonymData =
             await synonymResponse.json();
@@ -70,8 +71,7 @@ export default async function handler(req, res) {
                 .map(item => item.word)
                 .filter(Boolean)
                 .filter(item =>
-                    item.toLowerCase() !==
-                    word.toLowerCase()
+                    item.toLowerCase() !== word
                 );
 
 
@@ -79,9 +79,10 @@ export default async function handler(req, res) {
            ANTONYMS
         ========================== */
 
-        const antonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
-        );
+        const antonymResponse =
+            await fetch(
+                `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
+            );
 
         const antonymData =
             await antonymResponse.json();
@@ -91,9 +92,66 @@ export default async function handler(req, res) {
                 .map(item => item.word)
                 .filter(Boolean)
                 .filter(item =>
-                    item.toLowerCase() !==
-                    word.toLowerCase()
+                    item.toLowerCase() !== word
                 );
+
+
+        /* =========================
+           EXAMPLES
+        ========================== */
+
+        const examples = {
+
+            house:
+                "They bought a beautiful house.",
+
+            happy:
+                "She felt happy after hearing the good news.",
+
+            sad:
+                "He was sad when his friend left.",
+
+            beautiful:
+                "She wore a beautiful dress.",
+
+            big:
+                "They live in a big house.",
+
+            small:
+                "She has a small dog.",
+
+            good:
+                "He is a good student.",
+
+            bad:
+                "It was a bad decision.",
+
+            love:
+                "I love spending time with my family.",
+
+            friend:
+                "My friend helped me with my homework.",
+
+            family:
+                "My family lives in Armenia.",
+
+            school:
+                "She goes to school every morning.",
+
+            book:
+                "I am reading an interesting book.",
+
+            water:
+                "She drank a glass of water.",
+
+            beautiful:
+                "The city has many beautiful places."
+
+        };
+
+
+        const example =
+            examples[word] || "";
 
 
         /* =========================
@@ -123,7 +181,7 @@ export default async function handler(req, res) {
                         definition,
 
                     example:
-                        ""
+                        example
 
                 }],
 
