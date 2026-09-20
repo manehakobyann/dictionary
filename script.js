@@ -30,45 +30,36 @@ async function searchWord() {
     try {
 
         /* =========================
-           1. GET DICTIONARY DATA
+           GET WORD FROM DATAMUSE
         ========================== */
 
-        const url =
-            "https://api.dictionaryapi.dev/api/v2/entries/en/" +
-            encodeURIComponent(word);
-
-        const controller =
-            new AbortController();
-
-        const timeout =
-            setTimeout(() => {
-                controller.abort();
-            }, 15000);
-
-        const response =
-            await fetch(url, {
-                signal: controller.signal
-            });
-
-        clearTimeout(timeout);
+        const response = await fetch(
+            "/api/search?word=" +
+            encodeURIComponent(word)
+        );
 
         if (!response.ok) {
             throw new Error("Word not found");
         }
 
-        const data =
-            await response.json();
+        const data = await response.json();
 
         if (!data || !data.length) {
             throw new Error("No results");
         }
 
-        const entry =
-            data[0];
+        const entry = data[0];
+
+        const meaning =
+            entry.meanings?.[0];
+
+        const definition =
+            meaning?.definitions?.[0]?.definition ||
+            "Definition unavailable.";
 
 
         /* =========================
-           2. WORD
+           WORD
         ========================== */
 
         wordElement.textContent =
@@ -76,128 +67,37 @@ async function searchWord() {
 
 
         /* =========================
-           3. PRONUNCIATION
+           PHONETIC
         ========================== */
 
-        const phonetic =
-            entry.phonetic ||
-            (entry.phonetics || [])
-                .find(item => item.text)?.text ||
-            "Pronunciation unavailable";
-
         phoneticElement.textContent =
-            phonetic;
+            entry.phonetic ||
+            "Pronunciation unavailable.";
 
 
         /* =========================
-           4. FIND MAIN MEANING
+           PART OF SPEECH
         ========================== */
 
-        const meaning =
-            entry.meanings?.[0];
-
-        const partOfSpeech =
+        partOfSpeechElement.textContent =
             meaning?.partOfSpeech ||
             "Not available";
 
-        partOfSpeechElement.textContent =
-            partOfSpeech;
-
 
         /* =========================
-           5. DEFINITION
+           DEFINITION
         ========================== */
-
-        const definition =
-            meaning?.definitions?.[0]?.definition ||
-            "No definition available.";
 
         meaningElement.textContent =
             definition;
 
 
         /* =========================
-           6. SYNONYMS
+           SYNONYMS
         ========================== */
 
-        let synonyms = [];
-
-        for (
-            const meaningItem
-            of entry.meanings || []
-        ) {
-
-            for (
-                const definitionItem
-                of meaningItem.definitions || []
-            ) {
-
-                if (
-                    definitionItem.synonyms
-                ) {
-
-                    synonyms.push(
-                        ...definitionItem.synonyms
-                    );
-
-                }
-
-            }
-
-        }
-
-
-        /* =========================
-           7. ANTONYMS
-        ========================== */
-
-        let antonyms = [];
-
-        for (
-            const meaningItem
-            of entry.meanings || []
-        ) {
-
-            for (
-                const definitionItem
-                of meaningItem.definitions || []
-            ) {
-
-                if (
-                    definitionItem.antonyms
-                ) {
-
-                    antonyms.push(
-                        ...definitionItem.antonyms
-                    );
-
-                }
-
-            }
-
-        }
-
-
-        /* =========================
-           REMOVE DUPLICATES
-        ========================== */
-
-        synonyms = [
-            ...new Set(
-                synonyms.filter(Boolean)
-            )
-        ];
-
-        antonyms = [
-            ...new Set(
-                antonyms.filter(Boolean)
-            )
-        ];
-
-
-        /* =========================
-           SHOW SYNONYMS
-        ========================== */
+        const synonyms =
+            entry.synonyms || [];
 
         synonymsElement.textContent =
             synonyms.length
@@ -206,8 +106,11 @@ async function searchWord() {
 
 
         /* =========================
-           SHOW ANTONYMS
+           ANTONYMS
         ========================== */
+
+        const antonyms =
+            entry.antonyms || [];
 
         antonymsElement.textContent =
             antonyms.length
@@ -216,39 +119,12 @@ async function searchWord() {
 
 
         /* =========================
-           8. EXAMPLE
+           EXAMPLE
         ========================== */
 
-        let example = "";
-
-        for (
-            const meaningItem
-            of entry.meanings || []
-        ) {
-
-            for (
-                const definitionItem
-                of meaningItem.definitions || []
-            ) {
-
-                if (
-                    definitionItem.example
-                ) {
-
-                    example =
-                        definitionItem.example;
-
-                    break;
-                }
-
-            }
-
-            if (example) {
-                break;
-            }
-
-        }
-
+        const example =
+            meaning?.definitions?.[0]?.example ||
+            "";
 
         exampleElement.textContent =
             example ||
@@ -256,18 +132,18 @@ async function searchWord() {
 
 
         /* =========================
-           9. ARMENIAN PLACEHOLDERS
+           ARMENIAN
         ========================== */
 
         armenianElement.textContent =
-            "AI is translating...";
+            "Translating...";
 
         armenianExampleElement.textContent =
-            "AI is creating an Armenian example...";
+            "Translating...";
 
 
         /* =========================
-           10. SHOW RESULT
+           SHOW RESULT
         ========================== */
 
         result.classList.remove("hidden");
@@ -279,7 +155,7 @@ async function searchWord() {
 
 
         /* =========================
-           11. ARMENIAN TRANSLATION
+           MYMEMORY TRANSLATION
         ========================== */
 
         try {
@@ -312,26 +188,9 @@ async function searchWord() {
 
 
             if (!translationResponse.ok) {
-
-                let errorData = {};
-
-                try {
-
-                    errorData =
-                        await translationResponse.json();
-
-                } catch {
-
-                    errorData = {};
-
-                }
-
                 throw new Error(
-                    errorData.details ||
-                    errorData.error ||
                     "Translation failed"
                 );
-
             }
 
 
@@ -339,32 +198,21 @@ async function searchWord() {
                 await translationResponse.json();
 
 
-            /* =========================
-               ARMENIAN WORD
-            ========================== */
-
             armenianElement.textContent =
                 translation.armenian ||
                 "Translation unavailable.";
 
-
-            /* =========================
-               ARMENIAN EXAMPLE
-            ========================== */
 
             armenianExampleElement.textContent =
                 translation.armenianExample ||
                 "Example unavailable.";
 
 
-            /* =========================
-               ARMENIAN DEFINITION
-            ========================== */
-
             const armenianDefinitionElement =
                 document.getElementById(
                     "armenianDefinition"
                 );
+
 
             if (
                 armenianDefinitionElement
@@ -375,7 +223,6 @@ async function searchWord() {
                     "Definition unavailable.";
 
             }
-
 
         } catch (translationError) {
 
@@ -392,38 +239,16 @@ async function searchWord() {
 
         }
 
-
     } catch (error) {
 
         console.error(
-            "LINGORA SEARCH ERROR:",
+            "Search error:",
             error
         );
 
-
-        if (
-            error.name === "AbortError"
-        ) {
-
-            alert(
-                "The search is taking too long. Please try again."
-            );
-
-        } else if (
-            error.message === "Word not found"
-        ) {
-
-            alert(
-                "Lingora couldn't find this word. Please check the spelling."
-            );
-
-        } else {
-
-            alert(
-                "Something went wrong. Please try again."
-            );
-
-        }
+        alert(
+            "Something went wrong. Please try again."
+        );
 
     } finally {
 
@@ -437,9 +262,7 @@ async function searchWord() {
 }
 
 
-/* =========================
-   SEARCH BUTTON
-========================= */
+/* SEARCH BUTTON */
 
 searchButton.addEventListener(
     "click",
@@ -447,18 +270,14 @@ searchButton.addEventListener(
 );
 
 
-/* =========================
-   ENTER KEY
-========================= */
+/* ENTER KEY */
 
 searchInput.addEventListener(
     "keydown",
     function(event) {
 
         if (event.key === "Enter") {
-
             searchWord();
-
         }
 
     }
