@@ -18,132 +18,104 @@ export default async function handler(req, res) {
         });
     }
 
-    const apiKey =
-        process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-        return res.status(500).json({
-            error: "OPENAI_API_KEY is not configured"
-        });
-    }
-
     try {
 
-        const prompt = `
-You are Lingora, a multilingual AI dictionary.
+        /* =========================
+           TRANSLATE WORD
+        ========================== */
 
-For the exact English word and meaning below, provide:
-
-1. Armenian translation of the word
-2. Simple Armenian definition
-3. English example sentence
-4. Armenian translation of the example
-5. Five English synonyms for this exact meaning
-6. Five English antonyms for this exact meaning
-
-English word:
-${word}
-
-English definition:
-${definition || "No definition available."}
-
-English example:
-${example || "No example available."}
-
-Return ONLY valid JSON:
-
-{
-  "armenian": "...",
-  "armenianDefinition": "...",
-  "englishExample": "...",
-  "armenianExample": "...",
-  "synonyms": [],
-  "antonyms": []
-}
-`;
-
-        const response = await fetch(
-            "https://api.openai.com/v1/responses",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
-                },
-
-                body: JSON.stringify({
-                    model: "gpt-5.6-luna",
-                    input: prompt
-                })
-            }
+        const wordResponse = await fetch(
+            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|hy`
         );
 
-        const responseText =
-            await response.text();
+        const wordData =
+            await wordResponse.json();
 
-        if (!response.ok) {
+        const armenian =
+            wordData.responseData?.translatedText ||
+            "Translation unavailable.";
 
-            console.error(
-                "OPENAI ERROR:",
-                responseText
-            );
 
-            return res.status(500).json({
-                error: "OpenAI request failed",
-                details: responseText
-            });
+        /* =========================
+           TRANSLATE DEFINITION
+        ========================== */
+
+        let armenianDefinition =
+            "Definition unavailable.";
+
+        if (definition) {
+
+            const definitionResponse =
+                await fetch(
+                    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(definition)}&langpair=en|hy`
+                );
+
+            const definitionData =
+                await definitionResponse.json();
+
+            armenianDefinition =
+                definitionData.responseData?.translatedText ||
+                "Definition unavailable.";
         }
 
-        const data =
-            JSON.parse(responseText);
 
-        const output =
-            data.output_text ||
-            data.output
-                ?.flatMap(item =>
-                    item.content || []
-                )
-                ?.find(item =>
-                    item.type === "output_text"
-                )
-                ?.text;
+        /* =========================
+           TRANSLATE EXAMPLE
+        ========================== */
 
-        if (!output) {
+        let armenianExample =
+            "Example unavailable.";
 
-            return res.status(500).json({
-                error: "OpenAI returned no text",
-                details: JSON.stringify(data)
-            });
+        if (example) {
+
+            const exampleResponse =
+                await fetch(
+                    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(example)}&langpair=en|hy`
+                );
+
+            const exampleData =
+                await exampleResponse.json();
+
+            armenianExample =
+                exampleData.responseData?.translatedText ||
+                "Example unavailable.";
         }
 
-        let result;
 
-        try {
+        return res.status(200).json({
 
-            result =
-                JSON.parse(output);
+            armenian:
+                armenian,
 
-        } catch (error) {
+            armenianDefinition:
+                armenianDefinition,
 
-            return res.status(500).json({
-                error: "AI returned invalid JSON",
-                details: output
-            });
-        }
+            englishExample:
+                example ||
+                "No example available.",
 
-        return res.status(200).json(result);
+            armenianExample:
+                armenianExample,
+
+            synonyms: [],
+
+            antonyms: []
+
+        });
+
 
     } catch (error) {
 
         console.error(
-            "LINGORA ERROR:",
+            "Lingora translation error:",
             error
         );
 
         return res.status(500).json({
-            error: "Translation service error",
-            details: error.message
+            error:
+                "Translation service unavailable",
+            details:
+                error.message
         });
     }
 }
