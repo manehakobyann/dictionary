@@ -17,8 +17,8 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           1. DATAMUSE
-           DEFINITION + PART OF SPEECH
+           DATAMUSE
+           DEFINITION
         ========================== */
 
         const dictionaryResponse =
@@ -27,7 +27,9 @@ export default async function handler(req, res) {
             );
 
         if (!dictionaryResponse.ok) {
-            throw new Error("Dictionary request failed");
+            throw new Error(
+                "Dictionary request failed"
+            );
         }
 
         const dictionaryData =
@@ -66,23 +68,47 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           2. SYNONYMS
+           FORMAT PART OF SPEECH
+        ========================== */
+
+        const partOfSpeechNames = {
+
+            n: "Noun",
+            v: "Verb",
+            adj: "Adjective",
+            adv: "Adverb",
+            prep: "Preposition",
+            pron: "Pronoun",
+            conj: "Conjunction",
+            interj: "Interjection"
+
+        };
+
+        const formattedPartOfSpeech =
+            partOfSpeechNames[
+                partOfSpeech.toLowerCase()
+            ] ||
+            partOfSpeech;
+
+
+        /* =========================
+           SYNONYMS
         ========================== */
 
         let synonyms = [];
 
         try {
 
-            const response =
+            const synonymResponse =
                 await fetch(
                     `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
                 );
 
-            const data =
-                await response.json();
+            const synonymData =
+                await synonymResponse.json();
 
             synonyms =
-                data
+                synonymData
                     .map(item => item.word)
                     .filter(Boolean)
                     .filter(item =>
@@ -98,23 +124,23 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           3. ANTONYMS
+           ANTONYMS
         ========================== */
 
         let antonyms = [];
 
         try {
 
-            const response =
+            const antonymResponse =
                 await fetch(
                     `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
                 );
 
-            const data =
-                await response.json();
+            const antonymData =
+                await antonymResponse.json();
 
             antonyms =
-                data
+                antonymData
                     .map(item => item.word)
                     .filter(Boolean)
                     .filter(item =>
@@ -130,15 +156,16 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           4. WIKTIONARY
-           PRONUNCIATION ONLY
+           WIKTIONARY
+           PRONUNCIATION + EXAMPLE
         ========================== */
 
         let phonetic = "";
+        let example = "";
 
         try {
 
-            const pronunciationResponse =
+            const response =
                 await fetch(
                     "https://en.wiktionary.org/w/api.php" +
                     "?action=parse" +
@@ -155,19 +182,21 @@ export default async function handler(req, res) {
                     }
                 );
 
-            if (pronunciationResponse.ok) {
+            if (response.ok) {
 
-                const pronunciationData =
-                    await pronunciationResponse.json();
+                const data =
+                    await response.json();
 
                 const wikitext =
-                    pronunciationData
+                    data
                         ?.parse
                         ?.wikitext
                         ?.["*"] || "";
 
 
-                /* IPA template */
+                /* =========================
+                   IPA
+                ========================== */
 
                 const ipaMatch =
                     wikitext.match(
@@ -181,8 +210,6 @@ export default async function handler(req, res) {
 
                 }
 
-
-                /* Direct IPA fallback */
 
                 if (!phonetic) {
 
@@ -200,12 +227,35 @@ export default async function handler(req, res) {
 
                 }
 
+
+                /* =========================
+                   EXAMPLE
+                ========================== */
+
+                const exampleMatches =
+                    [
+                        ...wikitext.matchAll(
+                            /\{\{ux\|en\|([^|}]+)/gi
+                        )
+                    ];
+
+                if (
+                    exampleMatches.length
+                ) {
+
+                    example =
+                        cleanText(
+                            exampleMatches[0][1]
+                        );
+
+                }
+
             }
 
         } catch (error) {
 
             console.log(
-                "Pronunciation unavailable:",
+                "Optional Wiktionary data unavailable:",
                 error.message
             );
 
@@ -213,7 +263,7 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           5. RESULT
+           RESULT
         ========================== */
 
         return res.status(200).json([{
@@ -229,7 +279,7 @@ export default async function handler(req, res) {
             meanings: [{
 
                 partOfSpeech:
-                    partOfSpeech,
+                    formattedPartOfSpeech,
 
                 definitions: [{
 
@@ -237,7 +287,7 @@ export default async function handler(req, res) {
                         definition,
 
                     example:
-                        ""
+                        example
 
                 }],
 
@@ -272,4 +322,51 @@ export default async function handler(req, res) {
                 error.message
         });
     }
+}
+
+
+/* =========================
+   CLEAN TEXT
+========================= */
+
+function cleanText(text) {
+
+    return String(text)
+
+        .replace(
+            /<[^>]*>/g,
+            ""
+        )
+
+        .replace(
+            /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
+            "$2"
+        )
+
+        .replace(
+            /\[\[([^\]]+)\]\]/g,
+            "$1"
+        )
+
+        .replace(
+            /&nbsp;/g,
+            " "
+        )
+
+        .replace(
+            /&amp;/g,
+            "&"
+        )
+
+        .replace(
+            /&quot;/g,
+            '"'
+        )
+
+        .replace(
+            /&#39;/g,
+            "'"
+        )
+
+        .trim();
 }
