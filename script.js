@@ -13,11 +13,13 @@ const antonymsElement = document.getElementById("antonyms");
 const exampleElement = document.getElementById("example");
 const armenianExampleElement = document.getElementById("armenianExample");
 
+
 async function searchWord() {
 
     const word = searchInput.value.trim();
 
     if (!word) {
+        alert("Please enter a word.");
         return;
     }
 
@@ -26,9 +28,12 @@ async function searchWord() {
 
     try {
 
-        // Dictionary API URL
+        /*
+         * Lingora now uses our backend.
+         * The backend communicates with the dictionary service.
+         */
         const url =
-            "https://api.dictionaryapi.dev/api/v2/entries/en/" +
+            "/api/search?word=" +
             encodeURIComponent(word);
 
         // Stop waiting after 10 seconds
@@ -45,7 +50,12 @@ async function searchWord() {
         clearTimeout(timeout);
 
         if (!response.ok) {
-            throw new Error("Word not found");
+
+            if (response.status === 404) {
+                throw new Error("Word not found");
+            }
+
+            throw new Error("Server error");
         }
 
         const data = await response.json();
@@ -56,58 +66,99 @@ async function searchWord() {
 
         const entry = data[0];
 
-        // WORD
-        wordElement.textContent = entry.word || word;
 
+        // -------------------------
+        // WORD
+        // -------------------------
+
+        wordElement.textContent =
+            entry.word || word;
+
+
+        // -------------------------
         // PRONUNCIATION
+        // -------------------------
+
         const phonetic =
             entry.phonetic ||
-            (entry.phonetics || []).find(item => item.text)?.text ||
+            (entry.phonetics || [])
+                .find(item => item.text)?.text ||
             "Pronunciation unavailable";
 
         phoneticElement.textContent = phonetic;
 
+
+        // -------------------------
         // MEANING
-        const meaning = entry.meanings?.[0];
+        // -------------------------
+
+        const meaning =
+            entry.meanings?.[0];
 
         partOfSpeechElement.textContent =
-            meaning?.partOfSpeech || "Not available";
+            meaning?.partOfSpeech ||
+            "Not available";
 
         meaningElement.textContent =
             meaning?.definitions?.[0]?.definition ||
             "No definition available.";
 
+
+        // -------------------------
         // SYNONYMS
-        const synonyms = meaning?.synonyms || [];
+        // -------------------------
+
+        const synonyms =
+            meaning?.synonyms || [];
 
         synonymsElement.textContent =
             synonyms.length
                 ? synonyms.join(" · ")
                 : "No synonyms available.";
 
+
+        // -------------------------
         // ANTONYMS
-        const antonyms = meaning?.antonyms || [];
+        // -------------------------
+
+        const antonyms =
+            meaning?.antonyms || [];
 
         antonymsElement.textContent =
             antonyms.length
                 ? antonyms.join(" · ")
                 : "No antonyms available.";
 
+
+        // -------------------------
         // EXAMPLE
+        // -------------------------
+
         const example =
-            meaning?.definitions?.find(item => item.example)?.example;
+            meaning?.definitions
+                ?.find(item => item.example)
+                ?.example;
 
         exampleElement.textContent =
-            example || "No example available.";
+            example ||
+            "No example available.";
 
+
+        // -------------------------
         // ARMENIAN
+        // -------------------------
+
         armenianElement.textContent =
             "AI Armenian translation — coming next.";
 
         armenianExampleElement.textContent =
             "AI Armenian example — coming next.";
 
+
+        // -------------------------
         // SHOW RESULT
+        // -------------------------
+
         result.classList.remove("hidden");
 
         result.scrollIntoView({
@@ -115,9 +166,14 @@ async function searchWord() {
             block: "start"
         });
 
+
     } catch (error) {
 
-        console.error("Lingora search error:", error);
+        console.error(
+            "Lingora search error:",
+            error
+        );
+
 
         if (error.name === "AbortError") {
 
@@ -125,13 +181,21 @@ async function searchWord() {
                 "The search is taking too long. Please try again."
             );
 
-        } else {
+        } else if (
+            error.message === "Word not found"
+        ) {
 
             alert(
                 "Lingora couldn't find this word. Please check the spelling."
             );
 
+        } else {
+
+            alert(
+                "Something went wrong. Please try again."
+            );
         }
+
 
     } finally {
 
@@ -142,15 +206,27 @@ async function searchWord() {
 }
 
 
+// -------------------------
 // SEARCH BUTTON
-searchButton.addEventListener("click", searchWord);
+// -------------------------
+
+searchButton.addEventListener(
+    "click",
+    searchWord
+);
 
 
+// -------------------------
 // ENTER KEY
-searchInput.addEventListener("keydown", function(event) {
+// -------------------------
 
-    if (event.key === "Enter") {
-        searchWord();
+searchInput.addEventListener(
+    "keydown",
+    function(event) {
+
+        if (event.key === "Enter") {
+            searchWord();
+        }
+
     }
-
-});
+);
