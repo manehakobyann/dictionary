@@ -15,40 +15,179 @@ const armenianExampleElement =
     document.getElementById("armenianExample");
 
 
+/* =========================
+   ANTONYM DATABASE
+========================= */
+
+const antonymDatabase = {
+
+    happy: ["sad", "unhappy"],
+    sad: ["happy"],
+    good: ["bad"],
+    bad: ["good"],
+    big: ["small", "little"],
+    small: ["big", "large"],
+    beautiful: ["ugly"],
+    ugly: ["beautiful"],
+    hot: ["cold"],
+    cold: ["hot"],
+    fast: ["slow"],
+    slow: ["fast"],
+    easy: ["difficult", "hard"],
+    difficult: ["easy"],
+    hard: ["easy", "soft"],
+    soft: ["hard"],
+    rich: ["poor"],
+    poor: ["rich"],
+    young: ["old"],
+    old: ["young"],
+    new: ["old"],
+    clean: ["dirty"],
+    dirty: ["clean"],
+    light: ["dark", "heavy"],
+    dark: ["light"],
+    strong: ["weak"],
+    weak: ["strong"],
+    early: ["late"],
+    late: ["early"],
+    open: ["closed"],
+    closed: ["open"],
+    full: ["empty"],
+    empty: ["full"],
+    true: ["false"],
+    false: ["true"],
+    right: ["wrong"],
+    wrong: ["right"],
+    love: ["hate"],
+    hate: ["love"],
+    friend: ["enemy"],
+    enemy: ["friend"],
+    success: ["failure"],
+    failure: ["success"],
+    win: ["lose"],
+    lose: ["win"],
+    start: ["finish", "end"],
+    finish: ["start"],
+    high: ["low"],
+    low: ["high"],
+    near: ["far"],
+    far: ["near"],
+    inside: ["outside"],
+    outside: ["inside"],
+    above: ["below"],
+    below: ["above"],
+    before: ["after"],
+    after: ["before"],
+    always: ["never"],
+    never: ["always"]
+};
+
+
+/* =========================
+   EXAMPLE DATABASE
+========================= */
+
+const exampleDatabase = {
+
+    house:
+        "They bought a beautiful house.",
+
+    happy:
+        "She felt happy after hearing the good news.",
+
+    sad:
+        "He was sad when his friend left.",
+
+    beautiful:
+        "She wore a beautiful dress.",
+
+    ugly:
+        "The building looked old and ugly.",
+
+    big:
+        "They live in a big house.",
+
+    small:
+        "She has a small dog.",
+
+    good:
+        "He is a good student.",
+
+    bad:
+        "It was a bad decision.",
+
+    love:
+        "I love spending time with my family.",
+
+    hate:
+        "He hates waking up early.",
+
+    friend:
+        "My friend helped me with my homework.",
+
+    family:
+        "My family lives in Armenia.",
+
+    school:
+        "She goes to school every morning.",
+
+    book:
+        "I am reading an interesting book.",
+
+    water:
+        "She drank a glass of water."
+};
+
+
+/* =========================
+   SEARCH
+========================= */
+
 async function searchWord() {
 
-    const word = searchInput.value.trim();
+    const word =
+        searchInput.value.trim();
 
     if (!word) {
         alert("Please enter a word.");
         return;
     }
 
-    searchButton.textContent = "SEARCHING...";
-    searchButton.disabled = true;
+    searchButton.textContent =
+        "SEARCHING...";
+
+    searchButton.disabled =
+        true;
 
     try {
 
         /* =========================
-           GET WORD FROM DATAMUSE
+           GET DICTIONARY DATA
         ========================== */
 
-        const response = await fetch(
-            "/api/search?word=" +
-            encodeURIComponent(word)
-        );
+        const response =
+            await fetch(
+                "/api/search?word=" +
+                encodeURIComponent(word)
+            );
 
         if (!response.ok) {
-            throw new Error("Word not found");
+            throw new Error(
+                "Word not found"
+            );
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         if (!data || !data.length) {
-            throw new Error("No results");
+            throw new Error(
+                "No results"
+            );
         }
 
-        const entry = data[0];
+        const entry =
+            data[0];
 
         const meaning =
             entry.meanings?.[0];
@@ -109,8 +248,13 @@ async function searchWord() {
            ANTONYMS
         ========================== */
 
+        const normalizedWord =
+            word.toLowerCase();
+
         const antonyms =
-            entry.antonyms || [];
+            antonymDatabase[
+                normalizedWord
+            ] || [];
 
         antonymsElement.textContent =
             antonyms.length
@@ -122,9 +266,18 @@ async function searchWord() {
            EXAMPLE
         ========================== */
 
+        const dictionaryExample =
+            meaning?.definitions?.find(
+                item => item.example
+            )?.example || "";
+
         const example =
-            meaning?.definitions?.[0]?.example ||
+            dictionaryExample ||
+            exampleDatabase[
+                normalizedWord
+            ] ||
             "";
+
 
         exampleElement.textContent =
             example ||
@@ -146,7 +299,9 @@ async function searchWord() {
            SHOW RESULT
         ========================== */
 
-        result.classList.remove("hidden");
+        result.classList.remove(
+            "hidden"
+        );
 
         result.scrollIntoView({
             behavior: "smooth",
@@ -155,7 +310,7 @@ async function searchWord() {
 
 
         /* =========================
-           MYMEMORY TRANSLATION
+           ARMENIAN TRANSLATION
         ========================== */
 
         try {
@@ -224,6 +379,7 @@ async function searchWord() {
 
             }
 
+
         } catch (translationError) {
 
             console.error(
@@ -262,7 +418,9 @@ async function searchWord() {
 }
 
 
-/* SEARCH BUTTON */
+/* =========================
+   SEARCH BUTTON
+========================= */
 
 searchButton.addEventListener(
     "click",
@@ -270,7 +428,9 @@ searchButton.addEventListener(
 );
 
 
-/* ENTER KEY */
+/* =========================
+   ENTER KEY
+========================= */
 
 searchInput.addEventListener(
     "keydown",
