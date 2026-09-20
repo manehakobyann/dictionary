@@ -16,28 +16,22 @@ export default async function handler(req, res) {
 
     try {
 
-        /* =========================
-           GET MAIN WORD
-        ========================== */
-
-        const mainResponse = await fetch(
+        const response = await fetch(
             `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
         );
 
-        const mainData =
-            await mainResponse.json();
+        const data = await response.json();
 
-        if (!mainData.length) {
+        if (!data.length) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const mainWord =
-            mainData[0];
+        const item = data[0];
 
         const definitions =
-            mainWord.defs || [];
+            item.defs || [];
 
         let partOfSpeech = "word";
         let definition = "Definition unavailable.";
@@ -57,93 +51,58 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           GET SYNONYMS
+           SYNONYMS
         ========================== */
 
         const synonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&md=dps&max=20`
+            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
         );
 
         const synonymData =
             await synonymResponse.json();
 
-
-        /*
-         * Only keep synonyms that:
-         * 1. Are not the original word
-         * 2. Match the same part of speech
-         */
-
-        const synonyms = synonymData
-            .filter(item => {
-
-                if (
-                    item.word.toLowerCase() ===
+        const synonyms =
+            synonymData
+                .map(item => item.word)
+                .filter(Boolean)
+                .filter(item =>
+                    item.toLowerCase() !==
                     word.toLowerCase()
-                ) {
-                    return false;
-                }
-
-                const tags =
-                    item.tags || [];
-
-                /*
-                 * If Datamuse gives POS information,
-                 * require the same POS.
-                 */
-
-                if (tags.length) {
-
-                    return tags.some(tag =>
-                        tag === partOfSpeech
-                    );
-                }
-
-                return true;
-
-            })
-            .map(item => item.word)
-            .filter(Boolean)
-            .filter((value, index, array) =>
-                array.indexOf(value) === index
-            )
-            .slice(0, 8);
+                );
 
 
         /* =========================
-           GET ANTONYMS
+           ANTONYMS
         ========================== */
 
         const antonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=10`
+            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
         );
 
         const antonymData =
             await antonymResponse.json();
 
-        const antonyms = antonymData
-            .map(item => item.word)
-            .filter(Boolean)
-            .filter(item =>
-                item.toLowerCase() !==
-                word.toLowerCase()
-            )
-            .filter((value, index, array) =>
-                array.indexOf(value) === index
-            )
-            .slice(0, 8);
+        const antonyms =
+            antonymData
+                .map(item => item.word)
+                .filter(Boolean)
+                .filter(item =>
+                    item.toLowerCase() !==
+                    word.toLowerCase()
+                );
 
 
         /* =========================
-           FINAL RESULT
+           RESULT
         ========================== */
 
         return res.status(200).json([{
 
-            word: word,
+            word:
+                item.word || word,
 
             phonetic:
-                mainWord.tags?.find(tag =>
+                item.tags?.find(tag =>
                     tag.startsWith("pron:")
                 )?.replace("pron:", "") || "",
 
@@ -159,7 +118,8 @@ export default async function handler(req, res) {
                     definition:
                         definition,
 
-                    example: ""
+                    example:
+                        ""
 
                 }],
 
