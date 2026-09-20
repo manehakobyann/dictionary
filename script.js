@@ -13,20 +13,11 @@ const antonymsElement = document.getElementById("antonyms");
 const exampleElement = document.getElementById("example");
 const armenianExampleElement = document.getElementById("armenianExample");
 
-searchButton.addEventListener("click", searchWord);
-
-searchInput.addEventListener("keydown", function(event) {
-    if (event.key === "Enter") {
-        searchWord();
-    }
-});
-
 async function searchWord() {
 
     const word = searchInput.value.trim();
 
     if (!word) {
-        alert("Please enter a word.");
         return;
     }
 
@@ -35,9 +26,11 @@ async function searchWord() {
 
     try {
 
-        const response = await fetch(
-            `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
-        );
+        const url =
+            "https://api.dictionaryapi.dev/api/v2/entries/en/" +
+            encodeURIComponent(word);
+
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error("Word not found");
@@ -49,10 +42,12 @@ async function searchWord() {
 
         wordElement.textContent = entry.word || word;
 
-        phoneticElement.textContent =
+        const phonetic =
             entry.phonetic ||
-            entry.phonetics?.find(p => p.text)?.text ||
-            "Pronunciation unavailable";
+            (entry.phonetics || []).find(item => item.text)?.text ||
+            "";
+
+        phoneticElement.textContent = phonetic;
 
         const meaning = entry.meanings?.[0];
 
@@ -61,25 +56,33 @@ async function searchWord() {
 
         meaningElement.textContent =
             meaning?.definitions?.[0]?.definition ||
-            "Definition unavailable";
+            "No definition available.";
+
+        const synonyms = meaning?.synonyms || [];
 
         synonymsElement.textContent =
-            meaning?.synonyms?.join(" · ") ||
-            "No synonyms available";
+            synonyms.length
+                ? synonyms.join(" · ")
+                : "No synonyms available.";
+
+        const antonyms = meaning?.antonyms || [];
 
         antonymsElement.textContent =
-            meaning?.antonyms?.join(" · ") ||
-            "No antonyms available";
+            antonyms.length
+                ? antonyms.join(" · ")
+                : "No antonyms available.";
+
+        const example =
+            meaning?.definitions?.find(item => item.example)?.example;
 
         exampleElement.textContent =
-            meaning?.definitions?.find(d => d.example)?.example ||
-            "No example available";
+            example || "No example available.";
 
         armenianElement.textContent =
-            "Armenian translation will be added with AI.";
+            "AI Armenian translation — coming next.";
 
         armenianExampleElement.textContent =
-            "Հայերեն թարգմանությունը կավելացվի AI-ի միջոցով։";
+            "AI Armenian example — coming next.";
 
         result.classList.remove("hidden");
 
@@ -89,8 +92,10 @@ async function searchWord() {
 
     } catch (error) {
 
+        console.error(error);
+
         alert(
-            "We couldn't find this word. Please check the spelling and try again."
+            "Lingora couldn't find this word. Please try another word."
         );
 
     } finally {
@@ -100,3 +105,13 @@ async function searchWord() {
 
     }
 }
+
+searchButton.addEventListener("click", searchWord);
+
+searchInput.addEventListener("keydown", function(event) {
+
+    if (event.key === "Enter") {
+        searchWord();
+    }
+
+});
