@@ -16,37 +16,47 @@ export default async function handler(req, res) {
 
     try {
 
+        /* =========================
+           DICTIONARY DATA
+        ========================== */
+
         const response = await fetch(
-            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
+            `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
         );
 
-        const data = await response.json();
-
-        if (!data.length) {
+        if (!response.ok) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const item = data[0];
+        const data = await response.json();
 
-        const definitions =
-            item.defs || [];
+        const entry = data[0];
 
-        let partOfSpeech = "word";
-        let definition = "Definition unavailable.";
+        const meaning =
+            entry.meanings?.[0];
 
-        if (definitions.length) {
+        const definition =
+            meaning?.definitions?.[0];
 
-            const pieces =
-                definitions[0].split("\t");
+        /* =========================
+           EXAMPLE
+        ========================== */
 
-            partOfSpeech =
-                pieces[0] || "word";
+        let example = "";
 
-            definition =
-                pieces.slice(1).join("\t") ||
-                "Definition unavailable.";
+        for (const meaningItem of entry.meanings || []) {
+
+            for (const definitionItem of meaningItem.definitions || []) {
+
+                if (definitionItem.example) {
+                    example = definitionItem.example;
+                    break;
+                }
+            }
+
+            if (example) break;
         }
 
 
@@ -54,42 +64,79 @@ export default async function handler(req, res) {
            SYNONYMS
         ========================== */
 
-        const synonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
-        );
+        let synonyms = [];
 
-        const synonymData =
-            await synonymResponse.json();
+        for (const meaningItem of entry.meanings || []) {
 
-        const synonyms =
-            synonymData
-                .map(item => item.word)
-                .filter(Boolean)
-                .filter(item =>
-                    item.toLowerCase() !==
-                    word.toLowerCase()
-                );
+            for (const definitionItem of meaningItem.definitions || []) {
+
+                if (definitionItem.synonyms) {
+
+                    synonyms.push(
+                        ...definitionItem.synonyms
+                    );
+                }
+            }
+        }
 
 
         /* =========================
            ANTONYMS
         ========================== */
 
-        const antonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
-        );
+        let antonyms = [];
 
-        const antonymData =
-            await antonymResponse.json();
+        for (const meaningItem of entry.meanings || []) {
 
-        const antonyms =
-            antonymData
-                .map(item => item.word)
-                .filter(Boolean)
-                .filter(item =>
-                    item.toLowerCase() !==
-                    word.toLowerCase()
-                );
+            for (const definitionItem of meaningItem.definitions || []) {
+
+                if (definitionItem.antonyms) {
+
+                    antonyms.push(
+                        ...definitionItem.antonyms
+                    );
+                }
+            }
+        }
+
+
+        /* =========================
+           REMOVE DUPLICATES
+        ========================== */
+
+        synonyms = [
+            ...new Set(
+                synonyms
+                    .filter(Boolean)
+                    .filter(item =>
+                        item.toLowerCase() !==
+                        word.toLowerCase()
+                    )
+            )
+        ];
+
+        antonyms = [
+            ...new Set(
+                antonyms
+                    .filter(Boolean)
+                    .filter(item =>
+                        item.toLowerCase() !==
+                        word.toLowerCase()
+                    )
+            )
+        ];
+
+
+        /* =========================
+           PHONETIC
+        ========================== */
+
+        const phonetic =
+            entry.phonetic ||
+            entry.phonetics?.find(
+                item => item.text
+            )?.text ||
+            "";
 
 
         /* =========================
@@ -99,27 +146,28 @@ export default async function handler(req, res) {
         return res.status(200).json([{
 
             word:
-                item.word || word,
+                entry.word || word,
 
             phonetic:
-                item.tags?.find(tag =>
-                    tag.startsWith("pron:")
-                )?.replace("pron:", "") || "",
+                phonetic,
 
-            phonetics: [],
+            phonetics:
+                entry.phonetics || [],
 
             meanings: [{
 
                 partOfSpeech:
-                    partOfSpeech,
+                    meaning?.partOfSpeech ||
+                    "word",
 
                 definitions: [{
 
                     definition:
-                        definition,
+                        definition?.definition ||
+                        "Definition unavailable.",
 
                     example:
-                        ""
+                        example
 
                 }],
 
@@ -148,7 +196,10 @@ export default async function handler(req, res) {
 
         return res.status(500).json({
             error:
-                "Dictionary service unavailable"
+                "Dictionary service unavailable",
+
+            details:
+                error.message
         });
     }
 }
