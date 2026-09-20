@@ -17,8 +17,8 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           DATAMUSE
-           DEFINITION
+           1. DATAMUSE
+           DEFINITION + POS
         ========================== */
 
         const dictionaryResponse =
@@ -27,9 +27,7 @@ export default async function handler(req, res) {
             );
 
         if (!dictionaryResponse.ok) {
-            throw new Error(
-                "Dictionary request failed"
-            );
+            throw new Error("Dictionary request failed");
         }
 
         const dictionaryData =
@@ -68,7 +66,7 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           FORMAT PART OF SPEECH
+           FORMAT POS
         ========================== */
 
         const partOfSpeechNames = {
@@ -92,76 +90,18 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           SYNONYMS
+           DEFAULT VALUES
         ========================== */
 
         let synonyms = [];
-
-        try {
-
-            const synonymResponse =
-                await fetch(
-                    `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
-                );
-
-            const synonymData =
-                await synonymResponse.json();
-
-            synonyms =
-                synonymData
-                    .map(item => item.word)
-                    .filter(Boolean)
-                    .filter(item =>
-                        item.toLowerCase() !==
-                        word.toLowerCase()
-                    );
-
-        } catch {
-
-            synonyms = [];
-
-        }
-
-
-        /* =========================
-           ANTONYMS
-        ========================== */
-
         let antonyms = [];
-
-        try {
-
-            const antonymResponse =
-                await fetch(
-                    `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
-                );
-
-            const antonymData =
-                await antonymResponse.json();
-
-            antonyms =
-                antonymData
-                    .map(item => item.word)
-                    .filter(Boolean)
-                    .filter(item =>
-                        item.toLowerCase() !==
-                        word.toLowerCase()
-                    );
-
-        } catch {
-
-            antonyms = [];
-
-        }
+        let example = "";
+        let phonetic = "";
 
 
         /* =========================
-           WIKTIONARY
-           PRONUNCIATION + EXAMPLE
+           2. WIKTIONARY
         ========================== */
-
-        let phonetic = "";
-        let example = "";
 
         try {
 
@@ -195,7 +135,7 @@ export default async function handler(req, res) {
 
 
                 /* =========================
-                   IPA
+                   PRONUNCIATION
                 ========================== */
 
                 const ipaMatch =
@@ -224,28 +164,63 @@ export default async function handler(req, res) {
                             directIPA[0];
 
                     }
-
                 }
 
 
                 /* =========================
-                   EXAMPLE
+                   FIND CORRECT POS SECTION
                 ========================== */
 
-                const exampleMatches =
-                    [
-                        ...wikitext.matchAll(
-                            /\{\{ux\|en\|([^|}]+)/gi
+                const section =
+                    getPartOfSpeechSection(
+                        wikitext,
+                        formattedPartOfSpeech
+                    );
+
+
+                if (section) {
+
+                    /* =========================
+                       EXAMPLE
+                    ========================== */
+
+                    const exampleMatches = [
+                        ...section.matchAll(
+                            /\{\{(?:ux|usex)\|(?:en\|)?([^|}\n]+)/gi
                         )
                     ];
 
-                if (
-                    exampleMatches.length
-                ) {
+                    if (
+                        exampleMatches.length
+                    ) {
 
-                    example =
-                        cleanText(
-                            exampleMatches[0][1]
+                        example =
+                            cleanText(
+                                exampleMatches[0][1]
+                            );
+
+                    }
+
+
+                    /* =========================
+                       SYNONYMS
+                    ========================== */
+
+                    synonyms =
+                        extractListSection(
+                            section,
+                            "Synonyms"
+                        );
+
+
+                    /* =========================
+                       ANTONYMS
+                    ========================== */
+
+                    antonyms =
+                        extractListSection(
+                            section,
+                            "Antonyms"
                         );
 
                 }
@@ -263,7 +238,7 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           RESULT
+           3. RESULT
         ========================== */
 
         return res.status(200).json([{
@@ -322,6 +297,110 @@ export default async function handler(req, res) {
                 error.message
         });
     }
+}
+
+
+/* =========================
+   FIND POS SECTION
+========================= */
+
+function getPartOfSpeechSection(
+    wikitext,
+    partOfSpeech
+) {
+
+    const names = {
+
+        Noun: "Noun",
+        Verb: "Verb",
+        Adjective: "Adjective",
+        Adverb: "Adverb",
+        Pronoun: "Pronoun",
+        Preposition: "Preposition",
+        Conjunction: "Conjunction",
+        Interjection: "Interjection"
+
+    };
+
+    const sectionName =
+        names[partOfSpeech];
+
+    if (!sectionName) {
+        return "";
+    }
+
+
+    const pattern =
+        new RegExp(
+            "={3,4}" +
+            sectionName +
+            "={3,4}([\\s\\S]*?)(?=\\n={3,4}[^=]|$)",
+            "i"
+        );
+
+    const match =
+        wikitext.match(pattern);
+
+    return match
+        ? match[1]
+        : "";
+}
+
+
+/* =========================
+   EXTRACT SYNONYMS /
+   ANTONYMS
+========================= */
+
+function extractListSection(
+    section,
+    heading
+) {
+
+    const pattern =
+        new RegExp(
+            "={4,5}" +
+            heading +
+            "={4,5}([\\s\\S]*?)(?=\\n={4,5}[^=]|\\n={3,4}[^=]|$)",
+            "i"
+        );
+
+    const match =
+        section.match(pattern);
+
+    if (!match) {
+        return [];
+    }
+
+    const text =
+        match[1];
+
+    const results = [];
+
+    const links =
+        text.match(
+            /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
+        ) || [];
+
+    for (
+        const link of links
+    ) {
+
+        const value =
+            link
+                .replace(/^\[\[/, "")
+                .replace(/\]\]$/, "")
+                .split("|")[0]
+                .trim();
+
+        if (value) {
+            results.push(value);
+        }
+    }
+
+    return [
+        ...new Set(results)
+    ].slice(0, 8);
 }
 
 
