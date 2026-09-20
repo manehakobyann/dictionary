@@ -26,11 +26,23 @@ async function searchWord() {
 
     try {
 
+        // Dictionary API URL
         const url =
             "https://api.dictionaryapi.dev/api/v2/entries/en/" +
             encodeURIComponent(word);
 
-        const response = await fetch(url);
+        // Stop waiting after 10 seconds
+        const controller = new AbortController();
+
+        const timeout = setTimeout(() => {
+            controller.abort();
+        }, 10000);
+
+        const response = await fetch(url, {
+            signal: controller.signal
+        });
+
+        clearTimeout(timeout);
 
         if (!response.ok) {
             throw new Error("Word not found");
@@ -38,17 +50,24 @@ async function searchWord() {
 
         const data = await response.json();
 
+        if (!data || !data.length) {
+            throw new Error("No results");
+        }
+
         const entry = data[0];
 
+        // WORD
         wordElement.textContent = entry.word || word;
 
+        // PRONUNCIATION
         const phonetic =
             entry.phonetic ||
             (entry.phonetics || []).find(item => item.text)?.text ||
-            "";
+            "Pronunciation unavailable";
 
         phoneticElement.textContent = phonetic;
 
+        // MEANING
         const meaning = entry.meanings?.[0];
 
         partOfSpeechElement.textContent =
@@ -58,6 +77,7 @@ async function searchWord() {
             meaning?.definitions?.[0]?.definition ||
             "No definition available.";
 
+        // SYNONYMS
         const synonyms = meaning?.synonyms || [];
 
         synonymsElement.textContent =
@@ -65,6 +85,7 @@ async function searchWord() {
                 ? synonyms.join(" · ")
                 : "No synonyms available.";
 
+        // ANTONYMS
         const antonyms = meaning?.antonyms || [];
 
         antonymsElement.textContent =
@@ -72,31 +93,45 @@ async function searchWord() {
                 ? antonyms.join(" · ")
                 : "No antonyms available.";
 
+        // EXAMPLE
         const example =
             meaning?.definitions?.find(item => item.example)?.example;
 
         exampleElement.textContent =
             example || "No example available.";
 
+        // ARMENIAN
         armenianElement.textContent =
             "AI Armenian translation — coming next.";
 
         armenianExampleElement.textContent =
             "AI Armenian example — coming next.";
 
+        // SHOW RESULT
         result.classList.remove("hidden");
 
         result.scrollIntoView({
-            behavior: "smooth"
+            behavior: "smooth",
+            block: "start"
         });
 
     } catch (error) {
 
-        console.error(error);
+        console.error("Lingora search error:", error);
 
-        alert(
-            "Lingora couldn't find this word. Please try another word."
-        );
+        if (error.name === "AbortError") {
+
+            alert(
+                "The search is taking too long. Please try again."
+            );
+
+        } else {
+
+            alert(
+                "Lingora couldn't find this word. Please check the spelling."
+            );
+
+        }
 
     } finally {
 
@@ -106,8 +141,12 @@ async function searchWord() {
     }
 }
 
+
+// SEARCH BUTTON
 searchButton.addEventListener("click", searchWord);
 
+
+// ENTER KEY
 searchInput.addEventListener("keydown", function(event) {
 
     if (event.key === "Enter") {
