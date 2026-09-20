@@ -1,1 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <title>Investory — AI Dictionary</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">INVESTORY</div>
+        <div class="tagline">Words • Meanings • Languages</div>
+    </header>
+
+    <main>
+
+        <section class="hero">
+
+            <p class="small-title">
+                AI LANGUAGE DICTIONARY
+            </p>
+
+            <h1>
+                Discover the meaning<br>
+                behind every word.
+            </h1>
+
+            <div class="search-box">
+
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Search any word..."
+                >
+
+                <button id="searchButton">
+                    SEARCH
+                </button>
+
+            </div>
+
+            <p class="hint">
+                Search in English, Armenian, Turkish or another language.
+            </p>
+
+        </section>
+
+
+        <section id="result" class="result hidden">
+
+            <div class="word-header">
+
+                <div>
+
+                    <h2 id="word"></h2>
+
+                    <span id="phonetic"></span>
+
+                </div>
+
+                <button id="audioButton" class="audio-button">
+                    🔊
+                </button>
+
+            </div>
+
+
+            <div class="info-grid">
+
+                <div class="card">
+
+                    <span class="label">
+                        PART OF SPEECH
+                    </span>
+
+                    <p id="partOfSpeech"></p>
+
+                </div>
+
+
+                <div class="card">
+
+                    <span class="label">
+                        MEANING
+                    </span>
+
+                    <p id="meaning"></p>
+
+                </div>
+
+
+                <div class="card">
+
+                    <span class="label">
+                        ARMENIAN
+                    </span>
+
+                    <p id="armenian"></p>
+
+                </div>
+
+
+                <div class="card">
+
+                    <span class="label">
+                        SYNONYMS
+                    </span>
+
+                    <p id="synonyms"></p>
+
+                </div>
+
+
+                <div class="card">
+
+                    <span class="label">
+                        ANTONYMS
+                    </span>
+
+                    <p id="antonyms"></p>
+
+                </div>
+
+
+                <div class="card example-card">
+
+                    <span class="label">
+                        EXAMPLE
+                    </span>
+
+                    <p id="example"></p>
+
+                    <p id="armenianExample"></p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="script.js"></script>
+
+</body>
+</html>
