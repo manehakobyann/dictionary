@@ -6,7 +6,11 @@ export default async function handler(req, res) {
         });
     }
 
-    const { word, definition, example } = req.body || {};
+    const {
+        word,
+        definition,
+        example
+    } = req.body || {};
 
     if (!word) {
         return res.status(400).json({
@@ -14,7 +18,8 @@ export default async function handler(req, res) {
         });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey =
+        process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
         return res.status(500).json({
@@ -23,29 +28,6 @@ export default async function handler(req, res) {
     }
 
     try {
-
-        const prompt = `
-You are Lingora, a multilingual AI dictionary.
-
-Translate the following English dictionary information into natural, simple Armenian.
-
-English word:
-${word}
-
-English definition:
-${definition || "No definition available."}
-
-English example:
-${example || "No example available."}
-
-Return ONLY valid JSON in this exact format:
-
-{
-  "armenian": "Armenian translation of the word",
-  "armenianDefinition": "Simple Armenian definition",
-  "armenianExample": "Natural Armenian example sentence"
-}
-`;
 
         const response = await fetch(
             "https://api.openai.com/v1/responses",
@@ -58,11 +40,101 @@ Return ONLY valid JSON in this exact format:
                 },
 
                 body: JSON.stringify({
+
                     model: "gpt-5.6-luna",
-                    input: prompt
+
+                    input: `
+You are Lingora, an AI multilingual dictionary.
+
+Analyze the English word according to the EXACT meaning provided.
+
+English word:
+${word}
+
+English definition:
+${definition || "No definition available."}
+
+English example:
+${example || "No example available."}
+
+Create a dictionary entry for this exact meaning.
+
+Return:
+- natural Armenian translation of the word
+- simple Armenian definition
+- natural English example sentence
+- natural Armenian translation of the example
+- 5 relevant English synonyms for THIS EXACT meaning
+- 5 relevant English antonyms for THIS EXACT meaning
+
+Do not include unrelated meanings of the word.
+Do not include words that are only loosely associated with the word.
+If a true antonym does not exist, return an empty array.
+`,
+
+                    text: {
+                        format: {
+                            type: "json_schema",
+
+                            name: "lingora_dictionary",
+
+                            strict: true,
+
+                            schema: {
+                                type: "object",
+
+                                properties: {
+
+                                    armenian: {
+                                        type: "string"
+                                    },
+
+                                    armenianDefinition: {
+                                        type: "string"
+                                    },
+
+                                    englishExample: {
+                                        type: "string"
+                                    },
+
+                                    armenianExample: {
+                                        type: "string"
+                                    },
+
+                                    synonyms: {
+                                        type: "array",
+                                        items: {
+                                            type: "string"
+                                        }
+                                    },
+
+                                    antonyms: {
+                                        type: "array",
+                                        items: {
+                                            type: "string"
+                                        }
+                                    }
+
+                                },
+
+                                required: [
+                                    "armenian",
+                                    "armenianDefinition",
+                                    "englishExample",
+                                    "armenianExample",
+                                    "synonyms",
+                                    "antonyms"
+                                ],
+
+                                additionalProperties: false
+                            }
+                        }
+                    }
+
                 })
             }
         );
+
 
         if (!response.ok) {
 
@@ -70,7 +142,7 @@ Return ONLY valid JSON in this exact format:
                 await response.text();
 
             console.error(
-                "OpenAI error:",
+                "OpenAI API error:",
                 errorText
             );
 
@@ -79,39 +151,34 @@ Return ONLY valid JSON in this exact format:
             });
         }
 
+
         const data =
             await response.json();
 
+
         const output =
-            data.output_text ||
-            data.output
-                ?.flatMap(item => item.content || [])
-                ?.find(item => item.type === "output_text")
-                ?.text;
+            data.output_text;
+
 
         if (!output) {
+
+            console.error(
+                "No output from OpenAI:",
+                data
+            );
+
             return res.status(500).json({
                 error: "AI returned no translation"
             });
         }
 
-        let translation;
 
-        try {
+        const result =
+            JSON.parse(output);
 
-            translation =
-                JSON.parse(output);
 
-        } catch {
+        return res.status(200).json(result);
 
-            return res.status(500).json({
-                error: "AI returned invalid JSON"
-            });
-        }
-
-        return res.status(200).json(
-            translation
-        );
 
     } catch (error) {
 
@@ -123,5 +190,6 @@ Return ONLY valid JSON in this exact format:
         return res.status(500).json({
             error: "Translation service unavailable"
         });
+
     }
 }
