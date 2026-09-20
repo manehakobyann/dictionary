@@ -1,1 +1,282 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600&display=swap');
 
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    background: #f5eee7;
+    color: #2d2724;
+    font-family: 'Montserrat', sans-serif;
+}
+
+/* HEADER */
+
+header {
+    height: 90px;
+    padding: 0 7%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(45, 39, 36, 0.12);
+}
+
+.logo {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px;
+    letter-spacing: 5px;
+    font-weight: 600;
+}
+
+.tagline {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+
+/* MAIN */
+
+main {
+    width: 100%;
+}
+
+/* HERO */
+
+.hero {
+    min-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.small-title {
+    font-size: 11px;
+    letter-spacing: 4px;
+    margin-bottom: 25px;
+    opacity: 0.6;
+}
+
+h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(50px, 7vw, 95px);
+    line-height: 0.95;
+    font-weight: 400;
+    margin-bottom: 55px;
+}
+
+/* SEARCH */
+
+.search-box {
+    width: min(700px, 90vw);
+    height: 68px;
+    display: flex;
+    background: #fff;
+    border: 1px solid #d8cec6;
+    box-shadow: 0 15px 45px rgba(45, 39, 36, 0.08);
+}
+
+.search-box input {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 0 25px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 15px;
+    background: transparent;
+    color: #2d2724;
+}
+
+.search-box input::placeholder {
+    color: #9a9089;
+}
+
+.search-box button {
+    width: 150px;
+    border: none;
+    background: #2d2724;
+    color: white;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: 0.3s ease;
+}
+
+.search-box button:hover {
+    background: #8d7464;
+}
+
+.hint {
+    margin-top: 20px;
+    font-size: 11px;
+    color: #887d76;
+}
+
+/* RESULT */
+
+.result {
+    width: min(1100px, 90%);
+    margin: 0 auto 100px;
+    animation: appear 0.7s ease forwards;
+}
+
+.hidden {
+    display: none;
+}
+
+.word-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 35px;
+    border-bottom: 1px solid #d8cec6;
+}
+
+.word-header h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 72px;
+    font-weight: 500;
+}
+
+#phonetic {
+    display: block;
+    margin-top: 5px;
+    color: #8d8179;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.audio-button {
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    border: 1px solid #bdb0a7;
+    background: transparent;
+    cursor: pointer;
+    font-size: 20px;
+    transition: 0.3s ease;
+}
+
+.audio-button:hover {
+    background: #2d2724;
+    color: white;
+}
+
+/* INFORMATION GRID */
+
+.info-grid {
+    margin-top: 35px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.65);
+    padding: 30px;
+    min-height: 150px;
+    border: 1px solid rgba(45, 39, 36, 0.08);
+    transition: 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 15px 30px rgba(45, 39, 36, 0.07);
+}
+
+.label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: #9a8b81;
+    margin-bottom: 18px;
+}
+
+.card p {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 24px;
+    line-height: 1.4;
+}
+
+.example-card {
+    grid-column: span 2;
+}
+
+#armenianExample {
+    margin-top: 15px;
+    color: #88766a;
+    font-size: 20px;
+}
+
+/* ANIMATION */
+
+@keyframes appear {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* MOBILE */
+
+@media (max-width: 700px) {
+
+    header {
+        height: 75px;
+        padding: 0 5%;
+    }
+
+    .logo {
+        font-size: 25px;
+    }
+
+    .tagline {
+        display: none;
+    }
+
+    .hero {
+        min-height: 75vh;
+        padding: 50px 15px;
+    }
+
+    h1 {
+        font-size: 55px;
+        margin-bottom: 40px;
+    }
+
+    .search-box {
+        height: 60px;
+    }
+
+    .search-box button {
+        width: 110px;
+    }
+
+    .word-header h2 {
+        font-size: 52px;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .example-card {
+        grid-column: span 1;
+    }
+
+    .card {
+        padding: 25px;
+    }
+}
