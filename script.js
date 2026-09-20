@@ -58,7 +58,7 @@ async function searchWord() {
                 throw new Error("Word not found");
             }
 
-            throw new Error("Server error");
+            throw new Error("Dictionary server error");
         }
 
         const data =
@@ -70,12 +70,18 @@ async function searchWord() {
 
         const entry = data[0];
 
+
         /* =========================
-           2. BASIC INFORMATION
+           2. WORD
         ========================== */
 
         wordElement.textContent =
             entry.word || word;
+
+
+        /* =========================
+           3. PRONUNCIATION
+        ========================== */
 
         const phonetic =
             entry.phonetic ||
@@ -85,6 +91,11 @@ async function searchWord() {
 
         phoneticElement.textContent =
             phonetic;
+
+
+        /* =========================
+           4. MEANING
+        ========================== */
 
         const meaning =
             entry.meanings?.[0];
@@ -96,6 +107,7 @@ async function searchWord() {
         partOfSpeechElement.textContent =
             partOfSpeech;
 
+
         const definition =
             meaning?.definitions?.[0]?.definition ||
             "No definition available.";
@@ -103,58 +115,64 @@ async function searchWord() {
         meaningElement.textContent =
             definition;
 
-        /* =========================
-           3. SYNONYMS
-        ========================== */
 
-        const synonyms =
-            meaning?.synonyms ||
-            entry.synonyms ||
-            [];
+        /* =========================
+           5. CURRENT SYNONYMS
+           
+           We intentionally leave
+           these empty for now.
+           AI will provide the
+           correct synonyms.
+        ========================== */
 
         synonymsElement.textContent =
-            synonyms.length
-                ? synonyms.join(" · ")
-                : "No synonyms available.";
-
-        /* =========================
-           4. ANTONYMS
-        ========================== */
-
-        const antonyms =
-            meaning?.antonyms ||
-            entry.antonyms ||
-            [];
+            "AI is finding synonyms...";
 
         antonymsElement.textContent =
-            antonyms.length
-                ? antonyms.join(" · ")
-                : "No antonyms available.";
+            "AI is finding antonyms...";
+
 
         /* =========================
-           5. EXAMPLE
+           6. CURRENT EXAMPLE
         ========================== */
 
         const example =
             meaning?.definitions
                 ?.find(item => item.example)
                 ?.example ||
-            "No example available.";
+            "";
 
         exampleElement.textContent =
-            example;
+            example ||
+            "AI is creating an example...";
 
 
         /* =========================
-           6. AI ARMENIAN TRANSLATION
+           7. AI PLACEHOLDERS
         ========================== */
 
         armenianElement.textContent =
-            "Translating with AI...";
+            "AI is translating...";
 
         armenianExampleElement.textContent =
-            "Creating Armenian example...";
+            "AI is creating an Armenian example...";
 
+
+        /* =========================
+           8. SHOW RESULT
+        ========================== */
+
+        result.classList.remove("hidden");
+
+        result.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
+
+
+        /* =========================
+           9. ASK AI
+        ========================== */
 
         try {
 
@@ -170,7 +188,8 @@ async function searchWord() {
 
                     body: JSON.stringify({
 
-                        word: word,
+                        word:
+                            word,
 
                         definition:
                             definition,
@@ -183,37 +202,118 @@ async function searchWord() {
                 });
 
 
+            /* =========================
+               GET REAL AI ERROR
+            ========================== */
+
             if (!translationResponse.ok) {
 
+                let errorData = {};
+
+                try {
+
+                    errorData =
+                        await translationResponse.json();
+
+                } catch {
+
+                    errorData = {};
+
+                }
+
+
+                console.error(
+                    "AI ERROR:",
+                    errorData
+                );
+
+
                 throw new Error(
-                    "AI translation failed"
+                    errorData.details ||
+                    errorData.error ||
+                    `AI request failed (${translationResponse.status})`
                 );
 
             }
 
 
+            /* =========================
+               READ AI RESULT
+            ========================== */
+
             const translation =
                 await translationResponse.json();
 
 
-            /* Armenian word */
+            console.log(
+                "LINGORA AI RESULT:",
+                translation
+            );
+
+
+            /* =========================
+               ARMENIAN
+            ========================== */
 
             armenianElement.textContent =
                 translation.armenian ||
                 "Translation unavailable.";
 
 
-            /* Armenian example */
+            /* =========================
+               ARMENIAN EXAMPLE
+            ========================== */
 
             armenianExampleElement.textContent =
                 translation.armenianExample ||
                 "Example unavailable.";
 
 
-            /*
-             * If your HTML has a separate Armenian
-             * definition element, use it too.
-             */
+            /* =========================
+               AI SYNONYMS
+            ========================== */
+
+            const aiSynonyms =
+                translation.synonyms || [];
+
+
+            synonymsElement.textContent =
+                aiSynonyms.length
+                    ? aiSynonyms.join(" · ")
+                    : "No synonyms available.";
+
+
+            /* =========================
+               AI ANTONYMS
+            ========================== */
+
+            const aiAntonyms =
+                translation.antonyms || [];
+
+
+            antonymsElement.textContent =
+                aiAntonyms.length
+                    ? aiAntonyms.join(" · ")
+                    : "No antonyms available.";
+
+
+            /* =========================
+               AI ENGLISH EXAMPLE
+            ========================== */
+
+            if (
+                translation.englishExample
+            ) {
+
+                exampleElement.textContent =
+                    translation.englishExample;
+
+            }
+
+
+            /* =========================
+               ARMENIAN DEFINITION
+            ========================== */
 
             const armenianDefinitionElement =
                 document.getElementById(
@@ -221,11 +321,13 @@ async function searchWord() {
                 );
 
 
-            if (armenianDefinitionElement) {
+            if (
+                armenianDefinitionElement &&
+                translation.armenianDefinition
+            ) {
 
                 armenianDefinitionElement.textContent =
-                    translation.armenianDefinition ||
-                    "Definition unavailable.";
+                    translation.armenianDefinition;
 
             }
 
@@ -233,40 +335,46 @@ async function searchWord() {
         } catch (translationError) {
 
             console.error(
-                "Lingora AI translation error:",
+                "LINGORA AI TRANSLATION ERROR:",
                 translationError
             );
 
+
+            /*
+             * SHOW THE REAL ERROR
+             * TEMPORARILY
+             */
+
             armenianElement.textContent =
-                "AI translation unavailable.";
+                "AI ERROR: " +
+                translationError.message;
+
 
             armenianExampleElement.textContent =
-                "AI example unavailable.";
+                "Please check the AI connection.";
+
+
+            synonymsElement.textContent =
+                "AI synonyms unavailable.";
+
+
+            antonymsElement.textContent =
+                "AI antonyms unavailable.";
 
         }
-
-
-        /* =========================
-           7. SHOW RESULT
-        ========================== */
-
-        result.classList.remove("hidden");
-
-        result.scrollIntoView({
-            behavior: "smooth",
-            block: "start"
-        });
 
 
     } catch (error) {
 
         console.error(
-            "Lingora search error:",
+            "LINGORA SEARCH ERROR:",
             error
         );
 
 
-        if (error.name === "AbortError") {
+        if (
+            error.name === "AbortError"
+        ) {
 
             alert(
                 "The search is taking too long. Please try again."
@@ -319,7 +427,9 @@ searchInput.addEventListener(
     function(event) {
 
         if (event.key === "Enter") {
+
             searchWord();
+
         }
 
     }
