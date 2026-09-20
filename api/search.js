@@ -16,29 +16,16 @@ export default async function handler(req, res) {
 
     try {
 
-        // Get definition + part of speech
+        /* =========================
+           MAIN DICTIONARY RESULT
+        ========================== */
+
         const definitionResponse = await fetch(
             `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
         );
 
         const definitionData =
             await definitionResponse.json();
-
-        // Get synonyms
-        const synonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
-        );
-
-        const synonymData =
-            await synonymResponse.json();
-
-        // Get antonyms
-        const antonymResponse = await fetch(
-            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
-        );
-
-        const antonymData =
-            await antonymResponse.json();
 
         if (!definitionData.length) {
             return res.status(404).json({
@@ -59,22 +46,94 @@ export default async function handler(req, res) {
 
             const pieces = first.split("\t");
 
-            partOfSpeech = pieces[0] || "word";
+            partOfSpeech =
+                pieces[0] || "word";
 
             definition =
                 pieces.slice(1).join("\t") ||
                 "Definition unavailable.";
         }
 
-        const synonyms =
-            synonymData
-                .map(item => item.word)
-                .filter(Boolean);
 
-        const antonyms =
-            antonymData
-                .map(item => item.word)
-                .filter(Boolean);
+        /* =========================
+           SYNONYMS
+        ========================== */
+
+        const synonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&md=dps&max=20`
+        );
+
+        const synonymData =
+            await synonymResponse.json();
+
+
+        /*
+         * Keep synonyms that have the same
+         * part of speech as the searched word.
+         */
+
+        const synonyms = synonymData
+            .filter(item => {
+
+                const tags =
+                    item.tags || [];
+
+                return tags.some(tag =>
+                    tag === partOfSpeech
+                );
+
+            })
+            .map(item => item.word)
+            .filter(Boolean)
+            .filter((value, index, array) =>
+                array.indexOf(value) === index
+            )
+            .filter(value =>
+                value.toLowerCase() !==
+                word.toLowerCase()
+            )
+            .slice(0, 8);
+
+
+        /* =========================
+           ANTONYMS
+        ========================== */
+
+        const antonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&md=dps&max=20`
+        );
+
+        const antonymData =
+            await antonymResponse.json();
+
+
+        const antonyms = antonymData
+            .filter(item => {
+
+                const tags =
+                    item.tags || [];
+
+                return tags.length === 0 ||
+                    tags.some(tag =>
+                        tag === partOfSpeech
+                    );
+
+            })
+            .map(item => item.word)
+            .filter(Boolean)
+            .filter((value, index, array) =>
+                array.indexOf(value) === index
+            )
+            .filter(value =>
+                value.toLowerCase() !==
+                word.toLowerCase()
+            )
+            .slice(0, 8);
+
+
+        /* =========================
+           FINAL RESULT
+        ========================== */
 
         const result = [{
             word: word,
@@ -104,7 +163,9 @@ export default async function handler(req, res) {
             antonyms: antonyms
         }];
 
+
         return res.status(200).json(result);
+
 
     } catch (error) {
 
@@ -116,5 +177,6 @@ export default async function handler(req, res) {
         return res.status(500).json({
             error: "Dictionary service unavailable"
         });
+
     }
 }
