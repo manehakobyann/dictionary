@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+
     if (req.method !== "GET") {
         return res.status(405).json({
             error: "Method not allowed"
@@ -14,8 +15,9 @@ export default async function handler(req, res) {
     }
 
     try {
+
         const response = await fetch(
-            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
+            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dpsf&max=1`
         );
 
         if (!response.ok) {
@@ -34,27 +36,51 @@ export default async function handler(req, res) {
 
         const item = data[0];
 
+        const definitions = item.defs || [];
+
+        const firstDefinition =
+            definitions.length
+                ? definitions[0].replace(/^[^\t]+\t/, "")
+                : "Definition unavailable.";
+
+        const partOfSpeech =
+            definitions.length
+                ? definitions[0].split("\t")[0]
+                : "word";
+
         const result = [{
             word: word,
+
             phonetic: "",
+
             phonetics: [],
+
             meanings: [{
-                partOfSpeech: item.tags?.find(tag =>
-                    ["n", "v", "adj", "adv"].includes(tag)
-                ) || "word",
+                partOfSpeech: partOfSpeech,
+
                 definitions: [{
-                    definition: item.defstr || "Definition unavailable.",
+                    definition: firstDefinition,
                     example: ""
                 }],
+
                 synonyms: [],
+
                 antonyms: []
-            }]
+            }],
+
+            synonyms: [],
+
+            antonyms: []
         }];
 
         return res.status(200).json(result);
 
     } catch (error) {
-        console.error("Lingora dictionary error:", error);
+
+        console.error(
+            "Lingora dictionary error:",
+            error
+        );
 
         return res.status(500).json({
             error: "Dictionary service unavailable"
