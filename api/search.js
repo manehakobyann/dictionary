@@ -16,134 +16,259 @@ export default async function handler(req, res) {
 
     try {
 
-        const response = await fetch(
+        /* =========================
+           GET STRUCTURED ENTRY
+        ========================= */
+
+        const entryResponse = await fetch(
             `https://api.wiktapi.dev/v1/en/word/${encodeURIComponent(word)}?lang=en`
         );
 
-        if (!response.ok) {
+        if (!entryResponse.ok) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const data = await response.json();
+        const entryData =
+            await entryResponse.json();
 
-        if (!data.entries || !data.entries.length) {
-            return res.status(404).json({
-                error: "Word not found"
-            });
-        }
 
-        /*
-         * Find the English entry.
-         */
+        /* =========================
+           GET ALL ENGLISH ENTRIES
+        ========================= */
 
-        const entry =
-            data.entries.find(
-                item =>
-                    item.lang_code === "en"
-            ) || data.entries[0];
+        const entries =
+            Array.isArray(entryData.entries)
+                ? entryData.entries
+                : [];
 
 
         /*
-         * Prefer the first noun/verb/etc.
-         * entry that actually contains senses.
+         * IMPORTANT:
+         * Do NOT use entries[0].
+         *
+         * Find the requested grammatical
+         * entry explicitly.
          */
 
-        const senseEntry =
-            data.entries.find(
-                item =>
-                    item.lang_code === "en" &&
-                    item.senses?.length
-            ) || entry;
+        const preferredOrder = [
+            "noun",
+            "verb",
+            "adjective",
+            "adverb",
+            "pronoun",
+            "preposition",
+            "conjunction",
+            "interjection"
+        ];
 
 
-        const firstSense =
-            senseEntry.senses?.[0] || {};
+        let selectedEntry = null;
 
+        for (const pos of preferredOrder) {
 
-        const definition =
-            firstSense.glosses?.[0] ||
-            "Definition unavailable.";
+            selectedEntry =
+                entries.find(
+                    entry =>
+                        String(entry.pos)
+                            .toLowerCase() === pos
+                );
 
-
-        /*
-         * EXAMPLE
-         */
-
-        let example = "";
-
-        if (
-            firstSense.examples &&
-            firstSense.examples.length
-        ) {
-
-            const firstExample =
-                firstSense.examples[0];
-
-            if (typeof firstExample === "string") {
-                example = firstExample;
-            } else {
-                example =
-                    firstExample.text ||
-                    firstExample.example ||
-                    "";
+            if (selectedEntry) {
+                break;
             }
         }
 
 
         /*
-         * PRONUNCIATION
+         * Fallback
          */
 
-        let phonetic = "";
+        if (!selectedEntry) {
+            selectedEntry = entries[0];
+        }
 
-        const sound =
-            senseEntry.sounds?.find(
-                item => item.ipa
+
+        if (!selectedEntry) {
+            return res.status(404).json({
+                error: "No dictionary entry found"
+            });
+        }
+
+
+        const partOfSpeech =
+            formatPartOfSpeech(
+                selectedEntry.pos
             );
 
-        if (sound) {
-            phonetic = sound.ipa;
+
+        /* =========================
+           GET DEFINITIONS
+        ========================= */
+
+        const definitionsResponse =
+            await fetch(
+                `https://api.wiktapi.dev/v1/en/word/${encodeURIComponent(word)}/definitions?lang=en`
+            );
+
+
+        let definitionsData = null;
+
+        if (definitionsResponse.ok) {
+
+            definitionsData =
+                await definitionsResponse.json();
+
         }
 
 
         /*
-         * PART OF SPEECH
+         * Find definitions belonging
+         * to the selected POS.
          */
 
-        const pos =
-            formatPartOfSpeech(
-                senseEntry.pos
-            );
+        let senses =
+            selectedEntry.senses || [];
 
 
         /*
-         * SYNONYMS / ANTONYMS
-         *
-         * WiktAPI's structured sense data
-         * may contain these as links.
+         * Some API versions return
+         * definitions separately.
          */
+
+        if (
+            definitionsData &&
+            Array.isArray(
+                definitionsData.entries
+            )
+        ) {
+
+            const definitionEntry =
+                definitionsData.entries.find(
+                    entry =>
+                        String(entry.pos)
+                            .toLowerCase() ===
+                        String(selectedEntry.pos)
+                            .toLowerCase()
+                );
+
+            if (
+                definitionEntry &&
+                Array.isArray(
+                    definitionEntry.senses
+                )
+            ) {
+
+                senses =
+                    definitionEntry.senses;
+            }
+        }
+
+
+        /* =========================
+           FIRST SENSE
+        ========================= */
+
+        const sense =
+            senses.find(
+                item =>
+                    item.glosses &&
+                    item.glosses.length
+            ) || senses[0] || {};
+
+
+        const definition =
+            sense.glosses?.[0] ||
+            "Definition unavailable.";
+
+
+        /* =========================
+           EXAMPLE
+        ========================= */
+
+        let example = "";
+
+        if (
+            Array.isArray(
+                sense.examples
+            ) &&
+            sense.examples.length
+        ) {
+
+            const item =
+                sense.examples[0];
+
+            if (
+                typeof item === "string"
+            ) {
+
+                example = item;
+
+            } else {
+
+                example =
+                    item.text ||
+                    item.example ||
+                    "";
+
+            }
+        }
+
+
+        /* =========================
+           SYNONYMS
+        ========================= */
 
         const synonyms =
-            extractLinks(
-                firstSense.synonyms
+            extractWords(
+                sense.synonyms
             );
+
+
+        /* =========================
+           ANTONYMS
+        ========================= */
 
         const antonyms =
-            extractLinks(
-                firstSense.antonyms
+            extractWords(
+                sense.antonyms
             );
 
 
-        /*
-         * RETURN CLEAN DATA
-         */
+        /* =========================
+           PRONUNCIATION
+        ========================= */
+
+        let phonetic = "";
+
+        if (
+            Array.isArray(
+                selectedEntry.sounds
+            )
+        ) {
+
+            const sound =
+                selectedEntry.sounds.find(
+                    item => item.ipa
+                );
+
+            if (sound) {
+                phonetic =
+                    sound.ipa;
+            }
+        }
+
+
+        /* =========================
+           RESULT
+        ========================= */
 
         return res.status(200).json({
 
             word:
-                senseEntry.word || word,
+                selectedEntry.word ||
+                word,
 
             phonetic:
                 phonetic,
@@ -153,7 +278,7 @@ export default async function handler(req, res) {
             meanings: [{
 
                 partOfSpeech:
-                    pos,
+                    partOfSpeech,
 
                 definitions: [{
 
@@ -190,23 +315,25 @@ export default async function handler(req, res) {
     } catch (error) {
 
         console.error(
-            "WiktAPI error:",
+            "Lingora dictionary error:",
             error
         );
 
         return res.status(500).json({
+
             error:
                 "Dictionary service unavailable",
 
             details:
                 error.message
+
         });
     }
 }
 
 
 /* =========================
-   PART OF SPEECH
+   FORMAT POS
 ========================= */
 
 function formatPartOfSpeech(pos) {
@@ -227,21 +354,21 @@ function formatPartOfSpeech(pos) {
 
     };
 
-    return (
-        names[
-            String(pos || "").toLowerCase()
-        ] ||
+    const value =
+        String(pos || "")
+            .toLowerCase();
+
+    return names[value] ||
         pos ||
-        "Word"
-    );
+        "Word";
 }
 
 
 /* =========================
-   LINKS
+   EXTRACT WORDS
 ========================= */
 
-function extractLinks(items) {
+function extractWords(items) {
 
     if (!Array.isArray(items)) {
         return [];
@@ -250,7 +377,9 @@ function extractLinks(items) {
     return items
         .map(item => {
 
-            if (typeof item === "string") {
+            if (
+                typeof item === "string"
+            ) {
                 return item;
             }
 
