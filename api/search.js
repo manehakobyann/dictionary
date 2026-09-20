@@ -17,14 +17,12 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           1. DATAMUSE
-           DEFINITION + POS
-        ========================== */
+           GET MAIN DEFINITION
+        ========================= */
 
-        const dictionaryResponse =
-            await fetch(
-                `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
-            );
+        const dictionaryResponse = await fetch(
+            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
+        );
 
         if (!dictionaryResponse.ok) {
             throw new Error("Dictionary request failed");
@@ -39,14 +37,10 @@ export default async function handler(req, res) {
             });
         }
 
-        const item =
-            dictionaryData[0];
+        const item = dictionaryData[0];
 
-        let partOfSpeech =
-            "word";
-
-        let definition =
-            "Definition unavailable.";
+        let partOfSpeech = "word";
+        let definition = "Definition unavailable.";
 
         if (item.defs?.length) {
 
@@ -66,8 +60,8 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           FORMAT POS
-        ========================== */
+           FORMAT PART OF SPEECH
+        ========================= */
 
         const partOfSpeechNames = {
 
@@ -85,42 +79,41 @@ export default async function handler(req, res) {
         const formattedPartOfSpeech =
             partOfSpeechNames[
                 partOfSpeech.toLowerCase()
-            ] ||
-            partOfSpeech;
+            ] || partOfSpeech;
 
 
         /* =========================
-           DEFAULT VALUES
-        ========================== */
+           DEFAULTS
+        ========================= */
 
+        let phonetic = "";
+        let example = "";
         let synonyms = [];
         let antonyms = [];
-        let example = "";
-        let phonetic = "";
+        let armenianTranslations = [];
 
 
         /* =========================
-           2. WIKTIONARY
-        ========================== */
+           WIKTIONARY
+        ========================= */
 
         try {
 
-            const response =
-                await fetch(
-                    "https://en.wiktionary.org/w/api.php" +
-                    "?action=parse" +
-                    "&page=" +
-                    encodeURIComponent(word) +
-                    "&prop=wikitext" +
-                    "&format=json" +
-                    "&origin=*",
-                    {
-                        headers: {
-                            "User-Agent":
-                                "LingoraDictionary/1.0"
-                        }
+            const response = await fetch(
+                "https://en.wiktionary.org/w/api.php" +
+                "?action=parse" +
+                "&page=" +
+                encodeURIComponent(word) +
+                "&prop=wikitext" +
+                "&format=json" +
+                "&origin=*",
+                {
+                    headers: {
+                        "User-Agent":
+                            "LingoraDictionary/1.0"
                     }
-                );
+                }
+            );
 
             if (response.ok) {
 
@@ -135,18 +128,27 @@ export default async function handler(req, res) {
 
 
                 /* =========================
+                   ENGLISH SECTION
+                ========================= */
+
+                const englishSection =
+                    getEnglishSection(wikitext);
+
+
+                /* =========================
                    PRONUNCIATION
-                ========================== */
+                ========================= */
 
-                const ipaMatch =
-                    wikitext.match(
-                        /\{\{IPA\|(?:en\|)?([^|}\n]+)/i
-                    );
+                const ipaMatches = [
+                    ...englishSection.matchAll(
+                        /\{\{IPA\|(?:en\|)?([^|}\n]+)/gi
+                    )
+                ];
 
-                if (ipaMatch) {
+                if (ipaMatches.length) {
 
                     phonetic =
-                        ipaMatch[1].trim();
+                        ipaMatches[0][1].trim();
 
                 }
 
@@ -154,73 +156,69 @@ export default async function handler(req, res) {
                 if (!phonetic) {
 
                     const directIPA =
-                        wikitext.match(
+                        englishSection.match(
                             /\/[^\/\n]{2,40}\//
                         );
 
                     if (directIPA) {
-
                         phonetic =
                             directIPA[0];
-
                     }
                 }
 
 
                 /* =========================
-                   FIND CORRECT POS SECTION
-                ========================== */
+                   CORRECT POS SECTION
+                ========================= */
 
-                const section =
-                    getPartOfSpeechSection(
-                        wikitext,
+                const posSection =
+                    getPOSSection(
+                        englishSection,
                         formattedPartOfSpeech
                     );
 
 
-                if (section) {
+                if (posSection) {
 
                     /* =========================
                        EXAMPLE
-                    ========================== */
+                    ========================= */
 
-                    const exampleMatches = [
-                        ...section.matchAll(
-                            /\{\{(?:ux|usex)\|(?:en\|)?([^|}\n]+)/gi
-                        )
-                    ];
-
-                    if (
-                        exampleMatches.length
-                    ) {
-
-                        example =
-                            cleanText(
-                                exampleMatches[0][1]
-                            );
-
-                    }
+                    example =
+                        extractExample(
+                            posSection
+                        );
 
 
                     /* =========================
                        SYNONYMS
-                    ========================== */
+                    ========================= */
 
                     synonyms =
-                        extractListSection(
-                            section,
+                        extractSubsectionList(
+                            posSection,
                             "Synonyms"
                         );
 
 
                     /* =========================
                        ANTONYMS
-                    ========================== */
+                    ========================= */
 
                     antonyms =
-                        extractListSection(
-                            section,
+                        extractSubsectionList(
+                            posSection,
                             "Antonyms"
+                        );
+
+
+                    /* =========================
+                       ARMENIAN TRANSLATIONS
+                    ========================= */
+
+                    armenianTranslations =
+                        extractArmenianTranslations(
+                            posSection
                         );
 
                 }
@@ -230,7 +228,7 @@ export default async function handler(req, res) {
         } catch (error) {
 
             console.log(
-                "Optional Wiktionary data unavailable:",
+                "Wiktionary data unavailable:",
                 error.message
             );
 
@@ -238,8 +236,8 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           3. RESULT
-        ========================== */
+           RESULT
+        ========================= */
 
         return res.status(200).json([{
 
@@ -278,7 +276,10 @@ export default async function handler(req, res) {
                 synonyms,
 
             antonyms:
-                antonyms
+                antonyms,
+
+            armenianTranslations:
+                armenianTranslations
 
         }]);
 
@@ -290,56 +291,59 @@ export default async function handler(req, res) {
         );
 
         return res.status(500).json({
+
             error:
                 "Dictionary service unavailable",
 
             details:
                 error.message
+
         });
+
     }
+
 }
 
 
-/* =========================
-   FIND POS SECTION
-========================= */
+/* ==================================================
+   GET ENGLISH SECTION
+================================================== */
 
-function getPartOfSpeechSection(
-    wikitext,
+function getEnglishSection(wikitext) {
+
+    const match =
+        wikitext.match(
+            /^==English==([\s\S]*?)(?=^==[^=]|$)/im
+        );
+
+    return match
+        ? match[1]
+        : wikitext;
+}
+
+
+/* ==================================================
+   GET EXACT PART OF SPEECH SECTION
+================================================== */
+
+function getPOSSection(
+    englishSection,
     partOfSpeech
 ) {
 
-    const names = {
-
-        Noun: "Noun",
-        Verb: "Verb",
-        Adjective: "Adjective",
-        Adverb: "Adverb",
-        Pronoun: "Pronoun",
-        Preposition: "Preposition",
-        Conjunction: "Conjunction",
-        Interjection: "Interjection"
-
-    };
-
-    const sectionName =
-        names[partOfSpeech];
-
-    if (!sectionName) {
-        return "";
-    }
-
+    const heading =
+        partOfSpeech;
 
     const pattern =
         new RegExp(
-            "={3,4}" +
-            sectionName +
-            "={3,4}([\\s\\S]*?)(?=\\n={3,4}[^=]|$)",
-            "i"
+            "^===" +
+            escapeRegExp(heading) +
+            "===([\\s\\S]*?)(?=^===[^=]|$)",
+            "im"
         );
 
     const match =
-        wikitext.match(pattern);
+        englishSection.match(pattern);
 
     return match
         ? match[1]
@@ -347,22 +351,73 @@ function getPartOfSpeechSection(
 }
 
 
-/* =========================
-   EXTRACT SYNONYMS /
-   ANTONYMS
-========================= */
+/* ==================================================
+   EXTRACT FIRST REAL EXAMPLE
+================================================== */
 
-function extractListSection(
+function extractExample(section) {
+
+    const lines =
+        section.split("\n");
+
+    for (const line of lines) {
+
+        const trimmed =
+            line.trim();
+
+        /*
+         * Wiktionary examples normally begin
+         * with #* or #:
+         */
+
+        if (
+            trimmed.startsWith("#*") ||
+            trimmed.startsWith("#:")
+        ) {
+
+            let example =
+                trimmed
+                    .replace(/^#\*+/, "")
+                    .replace(/^#:+/, "")
+                    .trim();
+
+            example =
+                cleanText(example);
+
+            /*
+             * Ignore citation-only lines.
+             */
+
+            if (
+                example &&
+                example.length > 15 &&
+                !example.startsWith("{{")
+            ) {
+
+                return example;
+            }
+        }
+    }
+
+    return "";
+}
+
+
+/* ==================================================
+   EXTRACT SYNONYMS / ANTONYMS
+================================================== */
+
+function extractSubsectionList(
     section,
     heading
 ) {
 
     const pattern =
         new RegExp(
-            "={4,5}" +
-            heading +
-            "={4,5}([\\s\\S]*?)(?=\\n={4,5}[^=]|\\n={3,4}[^=]|$)",
-            "i"
+            "^====" +
+            escapeRegExp(heading) +
+            "====([\\s\\S]*?)(?=^====|^===|$)",
+            "im"
         );
 
     const match =
@@ -372,50 +427,160 @@ function extractListSection(
         return [];
     }
 
-    const text =
+    const subsection =
         match[1];
 
     const results = [];
 
-    const links =
-        text.match(
-            /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
-        ) || [];
+    const lines =
+        subsection.split("\n");
 
-    for (
-        const link of links
-    ) {
+    for (const line of lines) {
+
+        const trimmed =
+            line.trim();
+
+        if (!trimmed.startsWith("*")) {
+            continue;
+        }
+
+        const links =
+            [
+                ...trimmed.matchAll(
+                    /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
+                )
+            ];
+
+        for (const link of links) {
+
+            const value =
+                link[1].trim();
+
+            if (
+                value &&
+                !results.includes(value)
+            ) {
+
+                results.push(value);
+            }
+        }
+    }
+
+    return results.slice(0, 8);
+}
+
+
+/* ==================================================
+   EXTRACT ARMENIAN TRANSLATIONS
+================================================== */
+
+function extractArmenianTranslations(
+    section
+) {
+
+    const translationHeading =
+        section.match(
+            /^====Translations====([\s\S]*?)(?=^====|^===|$)/im
+        );
+
+    if (!translationHeading) {
+        return [];
+    }
+
+    const translationSection =
+        translationHeading[1];
+
+    const armenianLine =
+        translationSection.match(
+            /^\*\s*Armenian:\s*(.+)$/im
+        );
+
+    if (!armenianLine) {
+        return [];
+    }
+
+    const line =
+        armenianLine[1];
+
+    const results = [];
+
+    /*
+     * Handles:
+     *
+     * {{t|hy|ազգական}}
+     * {{t+|hy|ազգական}}
+     * {{tt|hy|ազգական}}
+     */
+
+    const templateMatches = [
+        ...line.matchAll(
+            /\{\{t\+?\+?\|hy\|([^}|]+)/gi
+        )
+    ];
+
+    for (const match of templateMatches) {
 
         const value =
-            link
-                .replace(/^\[\[/, "")
-                .replace(/\]\]$/, "")
-                .split("|")[0]
-                .trim();
+            cleanText(match[1]);
 
-        if (value) {
+        if (
+            value &&
+            !results.includes(value)
+        ) {
+
             results.push(value);
         }
     }
 
-    return [
-        ...new Set(results)
-    ].slice(0, 8);
+
+    /*
+     * Fallback for normal Wiktionary links.
+     */
+
+    if (!results.length) {
+
+        const links = [
+            ...line.matchAll(
+                /\[\[([^|\]]+)(?:\|[^\]]+)?\]\]/g
+            )
+        ];
+
+        for (const link of links) {
+
+            const value =
+                cleanText(link[1]);
+
+            if (
+                value &&
+                !results.includes(value)
+            ) {
+
+                results.push(value);
+            }
+        }
+    }
+
+
+    return results.slice(0, 8);
 }
 
 
-/* =========================
-   CLEAN TEXT
-========================= */
+/* ==================================================
+   CLEAN WIKITEXT
+================================================== */
 
 function cleanText(text) {
 
     return String(text)
 
+        /* Remove templates */
+
         .replace(
-            /<[^>]*>/g,
+            /\{\{[^{}]*\}\}/g,
             ""
         )
+
+        /* Wiki links */
 
         .replace(
             /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
@@ -426,6 +591,27 @@ function cleanText(text) {
             /\[\[([^\]]+)\]\]/g,
             "$1"
         )
+
+        /* HTML */
+
+        .replace(
+            /<[^>]*>/g,
+            ""
+        )
+
+        /* Quotes */
+
+        .replace(
+            /'''/g,
+            ""
+        )
+
+        .replace(
+            /''/g,
+            ""
+        )
+
+        /* HTML entities */
 
         .replace(
             /&nbsp;/g,
@@ -447,5 +633,24 @@ function cleanText(text) {
             "'"
         )
 
+        .replace(
+            /\s+/g,
+            " "
+        )
+
         .trim();
+}
+
+
+/* ==================================================
+   ESCAPE REGEX
+================================================== */
+
+function escapeRegExp(string) {
+
+    return String(string)
+        .replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&"
+        );
 }
