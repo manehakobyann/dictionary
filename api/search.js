@@ -16,33 +16,36 @@ export default async function handler(req, res) {
 
     try {
 
-        const response = await fetch(
+        /* =========================
+           GET MAIN WORD
+        ========================== */
+
+        const mainResponse = await fetch(
             `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dps&max=1`
         );
 
-        const data = await response.json();
+        const mainData =
+            await mainResponse.json();
 
-        if (!data.length) {
+        if (!mainData.length) {
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const item = data[0];
+        const mainWord =
+            mainData[0];
 
         const definitions =
-            item.defs || [];
+            mainWord.defs || [];
 
         let partOfSpeech = "word";
         let definition = "Definition unavailable.";
 
         if (definitions.length) {
 
-            const first =
-                definitions[0];
-
             const pieces =
-                first.split("\t");
+                definitions[0].split("\t");
 
             partOfSpeech =
                 pieces[0] || "word";
@@ -52,12 +55,95 @@ export default async function handler(req, res) {
                 "Definition unavailable.";
         }
 
+
+        /* =========================
+           GET SYNONYMS
+        ========================== */
+
+        const synonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&md=dps&max=20`
+        );
+
+        const synonymData =
+            await synonymResponse.json();
+
+
+        /*
+         * Only keep synonyms that:
+         * 1. Are not the original word
+         * 2. Match the same part of speech
+         */
+
+        const synonyms = synonymData
+            .filter(item => {
+
+                if (
+                    item.word.toLowerCase() ===
+                    word.toLowerCase()
+                ) {
+                    return false;
+                }
+
+                const tags =
+                    item.tags || [];
+
+                /*
+                 * If Datamuse gives POS information,
+                 * require the same POS.
+                 */
+
+                if (tags.length) {
+
+                    return tags.some(tag =>
+                        tag === partOfSpeech
+                    );
+                }
+
+                return true;
+
+            })
+            .map(item => item.word)
+            .filter(Boolean)
+            .filter((value, index, array) =>
+                array.indexOf(value) === index
+            )
+            .slice(0, 8);
+
+
+        /* =========================
+           GET ANTONYMS
+        ========================== */
+
+        const antonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=10`
+        );
+
+        const antonymData =
+            await antonymResponse.json();
+
+        const antonyms = antonymData
+            .map(item => item.word)
+            .filter(Boolean)
+            .filter(item =>
+                item.toLowerCase() !==
+                word.toLowerCase()
+            )
+            .filter((value, index, array) =>
+                array.indexOf(value) === index
+            )
+            .slice(0, 8);
+
+
+        /* =========================
+           FINAL RESULT
+        ========================== */
+
         return res.status(200).json([{
 
             word: word,
 
             phonetic:
-                item.tags?.find(tag =>
+                mainWord.tags?.find(tag =>
                     tag.startsWith("pron:")
                 )?.replace("pron:", "") || "",
 
@@ -77,15 +163,19 @@ export default async function handler(req, res) {
 
                 }],
 
-                synonyms: [],
+                synonyms:
+                    synonyms,
 
-                antonyms: []
+                antonyms:
+                    antonyms
 
             }],
 
-            synonyms: [],
+            synonyms:
+                synonyms,
 
-            antonyms: []
+            antonyms:
+                antonyms
 
         }]);
 
@@ -97,7 +187,8 @@ export default async function handler(req, res) {
         );
 
         return res.status(500).json({
-            error: "Dictionary service unavailable"
+            error:
+                "Dictionary service unavailable"
         });
     }
 }
