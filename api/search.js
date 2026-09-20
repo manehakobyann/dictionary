@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           MAIN DICTIONARY
+           DATAMUSE
         ========================== */
 
         const response = await fetch(
@@ -34,8 +34,7 @@ export default async function handler(req, res) {
 
         const item = data[0];
 
-        const definitions =
-            item.defs || [];
+        const definitions = item.defs || [];
 
         let partOfSpeech = "word";
         let definition = "Definition unavailable.";
@@ -58,15 +57,14 @@ export default async function handler(req, res) {
            SYNONYMS
         ========================== */
 
-        const synonymResponse =
-            await fetch(
-                `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
-            );
+        const synonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=8`
+        );
 
         const synonymData =
             await synonymResponse.json();
 
-        const synonyms =
+        let synonyms =
             synonymData
                 .map(item => item.word)
                 .filter(Boolean)
@@ -79,28 +77,104 @@ export default async function handler(req, res) {
            ANTONYMS
         ========================== */
 
-        const antonymResponse =
-            await fetch(
-                `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
-            );
+        const antonymResponse = await fetch(
+            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=8`
+        );
 
         const antonymData =
             await antonymResponse.json();
 
-        const antonyms =
+        let antonyms =
             antonymData
                 .map(item => item.word)
-                .filter(Boolean)
-                .filter(item =>
-                    item.toLowerCase() !== word
-                );
+                .filter(Boolean);
+
+
+        /* =========================
+           ANTONYM FALLBACK
+        ========================== */
+
+        const antonymDictionary = {
+
+            happy: ["sad", "unhappy"],
+            sad: ["happy", "cheerful"],
+            good: ["bad", "evil"],
+            bad: ["good"],
+            big: ["small", "little"],
+            small: ["big", "large"],
+            beautiful: ["ugly"],
+            ugly: ["beautiful"],
+            hot: ["cold"],
+            cold: ["hot"],
+            fast: ["slow"],
+            slow: ["fast"],
+            easy: ["difficult", "hard"],
+            difficult: ["easy"],
+            hard: ["easy", "soft"],
+            soft: ["hard"],
+            rich: ["poor"],
+            poor: ["rich"],
+            young: ["old"],
+            old: ["young"],
+            new: ["old"],
+            clean: ["dirty"],
+            dirty: ["clean"],
+            light: ["dark", "heavy"],
+            dark: ["light"],
+            strong: ["weak"],
+            weak: ["strong"],
+            early: ["late"],
+            late: ["early"],
+            open: ["closed"],
+            closed: ["open"],
+            full: ["empty"],
+            empty: ["full"],
+            true: ["false"],
+            false: ["true"],
+            right: ["wrong"],
+            wrong: ["right"],
+            love: ["hate"],
+            hate: ["love"],
+            friend: ["enemy"],
+            enemy: ["friend"],
+            success: ["failure"],
+            failure: ["success"],
+            win: ["lose"],
+            lose: ["win"],
+            start: ["finish", "end"],
+            finish: ["start"],
+            end: ["beginning"],
+            beginning: ["end"],
+            increase: ["decrease"],
+            decrease: ["increase"],
+            high: ["low"],
+            low: ["high"],
+            near: ["far"],
+            far: ["near"],
+            inside: ["outside"],
+            outside: ["inside"],
+            above: ["below"],
+            below: ["above"],
+            before: ["after"],
+            after: ["before"],
+            always: ["never"],
+            never: ["always"]
+        };
+
+
+        if (!antonyms.length) {
+
+            antonyms =
+                antonymDictionary[word] || [];
+
+        }
 
 
         /* =========================
            EXAMPLES
         ========================== */
 
-        const examples = {
+        const exampleDictionary = {
 
             house:
                 "They bought a beautiful house.",
@@ -142,20 +216,16 @@ export default async function handler(req, res) {
                 "I am reading an interesting book.",
 
             water:
-                "She drank a glass of water.",
-
-            beautiful:
-                "The city has many beautiful places."
-
+                "She drank a glass of water."
         };
 
 
         const example =
-            examples[word] || "";
+            exampleDictionary[word] || "";
 
 
         /* =========================
-           RESULT
+           FINAL RESULT
         ========================== */
 
         return res.status(200).json([{
