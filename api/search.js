@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     try {
 
         /* =========================
-           WIKTIONARY
+           1. GET WIKTIONARY DATA
         ========================== */
 
         const response = await fetch(
@@ -25,8 +25,7 @@ export default async function handler(req, res) {
             encodeURIComponent(word),
             {
                 headers: {
-                    "User-Agent":
-                        "LingoraDictionary/1.0"
+                    "User-Agent": "LingoraDictionary/1.0"
                 }
             }
         );
@@ -37,75 +36,117 @@ export default async function handler(req, res) {
             });
         }
 
-        const data =
-            await response.json();
-
-
-        /* =========================
-           ENGLISH ENTRIES
-        ========================== */
+        const data = await response.json();
 
         const englishEntries =
             data.en || [];
 
         if (!englishEntries.length) {
             return res.status(404).json({
-                error:
-                    "No English definition found"
+                error: "No English definition found"
             });
         }
 
 
         /* =========================
-           FIND USEFUL ENTRY
+           2. CHOOSE MEANING
+           
+           Prefer noun when available.
+           Otherwise use the first
+           available meaning.
         ========================== */
 
-        let selectedEntry =
-            englishEntries[0];
+        let selectedEntry = null;
+        let selectedDefinition = null;
 
-        let selectedDefinition =
-            selectedEntry.definitions?.[0];
+        const preferredPartsOfSpeech = [
+            "noun",
+            "verb",
+            "adjective",
+            "adverb",
+            "pronoun",
+            "preposition",
+            "conjunction",
+            "interjection"
+        ];
 
         for (
-            const entry of englishEntries
+            const preferredPOS
+            of preferredPartsOfSpeech
         ) {
 
-            if (
-                entry.definitions &&
-                entry.definitions.length
+            for (
+                const entry
+                of englishEntries
             ) {
 
-                selectedEntry =
-                    entry;
+                if (
+                    entry.partOfSpeech?.toLowerCase() ===
+                    preferredPOS &&
+                    entry.definitions?.length
+                ) {
 
-                selectedDefinition =
-                    entry.definitions[0];
+                    selectedEntry =
+                        entry;
 
+                    selectedDefinition =
+                        entry.definitions[0];
+
+                    break;
+                }
+            }
+
+            if (selectedEntry) {
                 break;
             }
         }
 
 
         /* =========================
-           DEFINITION
+           FALLBACK
+        ========================== */
+
+        if (!selectedEntry) {
+
+            selectedEntry =
+                englishEntries.find(
+                    entry =>
+                        entry.definitions?.length
+                );
+
+            selectedDefinition =
+                selectedEntry?.definitions?.[0];
+
+        }
+
+
+        if (!selectedDefinition) {
+            return res.status(404).json({
+                error:
+                    "Definition unavailable"
+            });
+        }
+
+
+        /* =========================
+           3. DEFINITION
         ========================== */
 
         const definition =
             cleanText(
-                selectedDefinition?.definition ||
+                selectedDefinition.definition ||
                 "Definition unavailable."
             );
 
 
         /* =========================
-           EXAMPLE
+           4. EXAMPLE
         ========================== */
 
         let example = "";
 
         if (
-            selectedDefinition?.examples &&
-            selectedDefinition.examples.length
+            selectedDefinition.examples?.length
         ) {
 
             example =
@@ -117,44 +158,7 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           COLLECT ALL EXAMPLES
-        ========================== */
-
-        if (!example) {
-
-            for (
-                const entry of englishEntries
-            ) {
-
-                for (
-                    const def
-                    of entry.definitions || []
-                ) {
-
-                    if (
-                        def.examples &&
-                        def.examples.length
-                    ) {
-
-                        example =
-                            cleanText(
-                                def.examples[0]
-                            );
-
-                        break;
-                    }
-
-                }
-
-                if (example) {
-                    break;
-                }
-            }
-        }
-
-
-        /* =========================
-           SYNONYMS
+           5. SYNONYMS
         ========================== */
 
         const synonyms =
@@ -165,7 +169,7 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           ANTONYMS
+           6. ANTONYMS
         ========================== */
 
         const antonyms =
@@ -176,7 +180,95 @@ export default async function handler(req, res) {
 
 
         /* =========================
-           RESULT
+           7. PRONUNCIATION
+           
+           Wiktionary wikitext
+        ========================== */
+
+        let phonetic = "";
+
+        try {
+
+            const pronunciationResponse =
+                await fetch(
+                    "https://en.wiktionary.org/w/api.php" +
+                    "?action=parse" +
+                    "&page=" +
+                    encodeURIComponent(word) +
+                    "&prop=wikitext" +
+                    "&format=json" +
+                    "&origin=*",
+                    {
+                        headers: {
+                            "User-Agent":
+                                "LingoraDictionary/1.0"
+                        }
+                    }
+                );
+
+            if (
+                pronunciationResponse.ok
+            ) {
+
+                const pronunciationData =
+                    await pronunciationResponse.json();
+
+                const wikitext =
+                    pronunciationData
+                        ?.parse
+                        ?.wikitext
+                        ?.["*"] || "";
+
+
+                /* IPA template */
+
+                const ipaMatch =
+                    wikitext.match(
+                        /\{\{IPA\|(?:en\|)?([^|}\n]+)/i
+                    );
+
+                if (ipaMatch) {
+
+                    phonetic =
+                        ipaMatch[1]
+                            .trim();
+
+                }
+
+
+                /* IPA symbols directly */
+
+                if (!phonetic) {
+
+                    const directIPA =
+                        wikitext.match(
+                            /\/[^\/\n]{2,40}\//
+                        );
+
+                    if (directIPA) {
+
+                        phonetic =
+                            directIPA[0];
+
+                    }
+                }
+
+            }
+
+        } catch (
+            pronunciationError
+        ) {
+
+            console.error(
+                "Pronunciation error:",
+                pronunciationError
+            );
+
+        }
+
+
+        /* =========================
+           8. RESULT
         ========================== */
 
         return res.status(200).json([{
@@ -185,10 +277,9 @@ export default async function handler(req, res) {
                 word,
 
             phonetic:
-                "",
+                phonetic,
 
-            phonetics:
-                [],
+            phonetics: [],
 
             meanings: [{
 
@@ -241,7 +332,7 @@ export default async function handler(req, res) {
 
 
 /* =========================
-   CLEAN WIKTIONARY HTML
+   CLEAN TEXT
 ========================= */
 
 function cleanText(text) {
@@ -288,7 +379,8 @@ function cleanText(text) {
 
 
 /* =========================
-   RELATIONS
+   COLLECT SYNONYMS /
+   ANTONYMS
 ========================= */
 
 function collectRelations(
@@ -299,7 +391,8 @@ function collectRelations(
     const results = [];
 
     for (
-        const entry of entries
+        const entry
+        of entries
     ) {
 
         for (
@@ -311,53 +404,54 @@ function collectRelations(
                 definition[type];
 
             if (
-                Array.isArray(relations)
+                !Array.isArray(relations)
+            ) {
+                continue;
+            }
+
+            for (
+                const relation
+                of relations
             ) {
 
-                for (
-                    const relation
-                    of relations
+                let value = "";
+
+                if (
+                    typeof relation ===
+                    "string"
                 ) {
 
-                    let value = "";
+                    value =
+                        cleanText(
+                            relation
+                        );
 
-                    if (
-                        typeof relation ===
-                        "string"
-                    ) {
+                } else if (
+                    relation?.word
+                ) {
 
-                        value =
-                            cleanText(
-                                relation
-                            );
+                    value =
+                        cleanText(
+                            relation.word
+                        );
 
-                    } else if (
-                        relation?.word
-                    ) {
+                } else if (
+                    relation?.text
+                ) {
 
-                        value =
-                            cleanText(
-                                relation.word
-                            );
+                    value =
+                        cleanText(
+                            relation.text
+                        );
 
-                    } else if (
-                        relation?.text
-                    ) {
+                }
 
-                        value =
-                            cleanText(
-                                relation.text
-                            );
-                    }
-
-                    if (value) {
-                        results.push(value);
-                    }
+                if (value) {
+                    results.push(value);
                 }
             }
         }
     }
-
 
     return [
         ...new Set(results)
