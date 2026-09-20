@@ -14,133 +14,17 @@ const exampleElement = document.getElementById("example");
 const armenianExampleElement =
     document.getElementById("armenianExample");
 
+const armenianDefinitionElement =
+    document.getElementById("armenianDefinition");
 
-/* =========================
-   ANTONYM DATABASE
-========================= */
+const audioButton =
+    document.getElementById("audioButton");
 
-const antonymDatabase = {
-
-    happy: ["sad", "unhappy"],
-    sad: ["happy"],
-    good: ["bad"],
-    bad: ["good"],
-    big: ["small", "little"],
-    small: ["big", "large"],
-    beautiful: ["ugly"],
-    ugly: ["beautiful"],
-    hot: ["cold"],
-    cold: ["hot"],
-    fast: ["slow"],
-    slow: ["fast"],
-    easy: ["difficult", "hard"],
-    difficult: ["easy"],
-    hard: ["easy", "soft"],
-    soft: ["hard"],
-    rich: ["poor"],
-    poor: ["rich"],
-    young: ["old"],
-    old: ["young"],
-    new: ["old"],
-    clean: ["dirty"],
-    dirty: ["clean"],
-    light: ["dark", "heavy"],
-    dark: ["light"],
-    strong: ["weak"],
-    weak: ["strong"],
-    early: ["late"],
-    late: ["early"],
-    open: ["closed"],
-    closed: ["open"],
-    full: ["empty"],
-    empty: ["full"],
-    true: ["false"],
-    false: ["true"],
-    right: ["wrong"],
-    wrong: ["right"],
-    love: ["hate"],
-    hate: ["love"],
-    friend: ["enemy"],
-    enemy: ["friend"],
-    success: ["failure"],
-    failure: ["success"],
-    win: ["lose"],
-    lose: ["win"],
-    start: ["finish", "end"],
-    finish: ["start"],
-    high: ["low"],
-    low: ["high"],
-    near: ["far"],
-    far: ["near"],
-    inside: ["outside"],
-    outside: ["inside"],
-    above: ["below"],
-    below: ["above"],
-    before: ["after"],
-    after: ["before"],
-    always: ["never"],
-    never: ["always"]
-};
+let currentAudio = null;
 
 
 /* =========================
-   EXAMPLE DATABASE
-========================= */
-
-const exampleDatabase = {
-
-    house:
-        "They bought a beautiful house.",
-
-    happy:
-        "She felt happy after hearing the good news.",
-
-    sad:
-        "He was sad when his friend left.",
-
-    beautiful:
-        "She wore a beautiful dress.",
-
-    ugly:
-        "The building looked old and ugly.",
-
-    big:
-        "They live in a big house.",
-
-    small:
-        "She has a small dog.",
-
-    good:
-        "He is a good student.",
-
-    bad:
-        "It was a bad decision.",
-
-    love:
-        "I love spending time with my family.",
-
-    hate:
-        "He hates waking up early.",
-
-    friend:
-        "My friend helped me with my homework.",
-
-    family:
-        "My family lives in Armenia.",
-
-    school:
-        "She goes to school every morning.",
-
-    book:
-        "I am reading an interesting book.",
-
-    water:
-        "She drank a glass of water."
-};
-
-
-/* =========================
-   SEARCH
+   SEARCH WORD
 ========================= */
 
 async function searchWord() {
@@ -149,9 +33,12 @@ async function searchWord() {
         searchInput.value.trim();
 
     if (!word) {
+
         alert("Please enter a word.");
+
         return;
     }
+
 
     searchButton.textContent =
         "SEARCHING...";
@@ -159,11 +46,12 @@ async function searchWord() {
     searchButton.disabled =
         true;
 
+
     try {
 
         /* =========================
            GET DICTIONARY DATA
-        ========================== */
+        ========================= */
 
         const response =
             await fetch(
@@ -171,35 +59,51 @@ async function searchWord() {
                 encodeURIComponent(word)
             );
 
+
         if (!response.ok) {
+
             throw new Error(
                 "Word not found"
             );
         }
 
-        const data =
+
+        const entry =
             await response.json();
 
-        if (!data || !data.length) {
+
+        if (
+            !entry ||
+            !entry.meanings ||
+            !entry.meanings.length
+        ) {
+
             throw new Error(
-                "No results"
+                "No dictionary data"
             );
         }
 
-        const entry =
-            data[0];
+
+        /* =========================
+           SELECT FIRST MEANING
+        ========================= */
 
         const meaning =
-            entry.meanings?.[0];
+            entry.meanings[0];
+
 
         const definition =
-            meaning?.definitions?.[0]?.definition ||
-            "Definition unavailable.";
+            meaning
+                ?.definitions
+                ?.find(
+                    item =>
+                        item.definition
+                );
 
 
         /* =========================
            WORD
-        ========================== */
+        ========================= */
 
         wordElement.textContent =
             entry.word || word;
@@ -207,36 +111,78 @@ async function searchWord() {
 
         /* =========================
            PHONETIC
-        ========================== */
+        ========================= */
+
+        const phonetic =
+            entry.phonetic ||
+            entry.phonetics?.find(
+                item => item.text
+            )?.text ||
+            "Pronunciation unavailable.";
+
 
         phoneticElement.textContent =
-            entry.phonetic ||
-            "Pronunciation unavailable.";
+            phonetic;
+
+
+        /* =========================
+           AUDIO
+        ========================= */
+
+        const audio =
+            entry.phonetics?.find(
+                item => item.audio
+            )?.audio;
+
+
+        if (audio) {
+
+            currentAudio =
+                new Audio(
+                    audio.startsWith("//")
+                        ? "https:" + audio
+                        : audio
+                );
+
+            audioButton.style.display =
+                "block";
+
+        } else {
+
+            currentAudio = null;
+
+            audioButton.style.display =
+                "none";
+        }
 
 
         /* =========================
            PART OF SPEECH
-        ========================== */
+        ========================= */
 
         partOfSpeechElement.textContent =
-            meaning?.partOfSpeech ||
+            meaning.partOfSpeech ||
             "Not available";
 
 
         /* =========================
            DEFINITION
-        ========================== */
+        ========================= */
 
         meaningElement.textContent =
-            definition;
+            definition?.definition ||
+            "Definition unavailable.";
 
 
         /* =========================
            SYNONYMS
-        ========================== */
+        ========================= */
 
         const synonyms =
-            entry.synonyms || [];
+            definition?.synonyms?.length
+                ? definition.synonyms
+                : meaning.synonyms || [];
+
 
         synonymsElement.textContent =
             synonyms.length
@@ -246,37 +192,26 @@ async function searchWord() {
 
         /* =========================
            ANTONYMS
-        ========================== */
-
-        const normalizedWord =
-            word.toLowerCase();
+        ========================= */
 
         const antonyms =
-            antonymDatabase[
-                normalizedWord
-            ] || [];
+            definition?.antonyms?.length
+                ? definition.antonyms
+                : meaning.antonyms || [];
+
 
         antonymsElement.textContent =
             antonyms.length
                 ? antonyms.join(" · ")
-                : "No antonyms available.";
+                : "No direct antonym available.";
 
 
         /* =========================
            EXAMPLE
-        ========================== */
-
-        const dictionaryExample =
-            meaning?.definitions?.find(
-                item => item.example
-            )?.example || "";
+        ========================= */
 
         const example =
-            dictionaryExample ||
-            exampleDatabase[
-                normalizedWord
-            ] ||
-            "";
+            definition?.example || "";
 
 
         exampleElement.textContent =
@@ -285,10 +220,13 @@ async function searchWord() {
 
 
         /* =========================
-           ARMENIAN
-        ========================== */
+           RESET ARMENIAN
+        ========================= */
 
         armenianElement.textContent =
+            "Translating...";
+
+        armenianDefinitionElement.textContent =
             "Translating...";
 
         armenianExampleElement.textContent =
@@ -297,11 +235,12 @@ async function searchWord() {
 
         /* =========================
            SHOW RESULT
-        ========================== */
+        ========================= */
 
         result.classList.remove(
             "hidden"
         );
+
 
         result.scrollIntoView({
             behavior: "smooth",
@@ -310,90 +249,104 @@ async function searchWord() {
 
 
         /* =========================
-           ARMENIAN TRANSLATION
-        ========================== */
+           TRANSLATION
+        ========================= */
 
-        try {
+        if (definition?.definition) {
 
-            const translationResponse =
-                await fetch(
-                    "/api/translate",
-                    {
-                        method: "POST",
+            try {
 
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
+                const translationResponse =
+                    await fetch(
+                        "/api/translate",
+                        {
+                            method: "POST",
 
-                        body: JSON.stringify({
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
 
-                            word:
-                                word,
+                            body: JSON.stringify({
 
-                            definition:
-                                definition,
+                                word:
+                                    word,
 
-                            example:
-                                example
+                                partOfSpeech:
+                                    meaning.partOfSpeech,
 
-                        })
-                    }
-                );
+                                definition:
+                                    definition.definition,
 
+                                example:
+                                    example
 
-            if (!translationResponse.ok) {
-                throw new Error(
-                    "Translation failed"
-                );
-            }
+                            })
+                        }
+                    );
 
 
-            const translation =
-                await translationResponse.json();
+                if (
+                    !translationResponse.ok
+                ) {
+
+                    throw new Error(
+                        "Translation failed"
+                    );
+                }
 
 
-            armenianElement.textContent =
-                translation.armenian ||
-                "Translation unavailable.";
+                const translation =
+                    await translationResponse.json();
 
 
-            armenianExampleElement.textContent =
-                translation.armenianExample ||
-                "Example unavailable.";
+                armenianElement.textContent =
+                    translation.armenian ||
+                    "Translation unavailable.";
 
-
-            const armenianDefinitionElement =
-                document.getElementById(
-                    "armenianDefinition"
-                );
-
-
-            if (
-                armenianDefinitionElement
-            ) {
 
                 armenianDefinitionElement.textContent =
                     translation.armenianDefinition ||
                     "Definition unavailable.";
 
+
+                armenianExampleElement.textContent =
+                    translation.armenianExample ||
+                    "Example unavailable.";
+
+
+            } catch (translationError) {
+
+                console.error(
+                    "Translation error:",
+                    translationError
+                );
+
+
+                armenianElement.textContent =
+                    "Translation unavailable.";
+
+
+                armenianDefinitionElement.textContent =
+                    "Definition unavailable.";
+
+
+                armenianExampleElement.textContent =
+                    "Example unavailable.";
             }
 
-
-        } catch (translationError) {
-
-            console.error(
-                "Translation error:",
-                translationError
-            );
+        } else {
 
             armenianElement.textContent =
                 "Translation unavailable.";
 
+            armenianDefinitionElement.textContent =
+                "Definition unavailable.";
+
             armenianExampleElement.textContent =
                 "Example unavailable.";
-
         }
+
 
     } catch (error) {
 
@@ -401,6 +354,7 @@ async function searchWord() {
             "Search error:",
             error
         );
+
 
         alert(
             "Something went wrong. Please try again."
@@ -413,9 +367,28 @@ async function searchWord() {
 
         searchButton.disabled =
             false;
-
     }
 }
+
+
+/* =========================
+   AUDIO BUTTON
+========================= */
+
+audioButton.addEventListener(
+    "click",
+    function() {
+
+        if (currentAudio) {
+
+            currentAudio.currentTime =
+                0;
+
+            currentAudio.play();
+        }
+
+    }
+);
 
 
 /* =========================
@@ -437,7 +410,9 @@ searchInput.addEventListener(
     function(event) {
 
         if (event.key === "Enter") {
+
             searchWord();
+
         }
 
     }
