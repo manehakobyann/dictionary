@@ -20,11 +20,9 @@ const armenianDefinitionElement =
 const audioButton =
     document.getElementById("audioButton");
 
-let currentAudio = null;
-
 
 /* =========================
-   SEARCH WORD
+   SEARCH
 ========================= */
 
 async function searchWord() {
@@ -33,12 +31,9 @@ async function searchWord() {
         searchInput.value.trim();
 
     if (!word) {
-
         alert("Please enter a word.");
-
         return;
     }
-
 
     searchButton.textContent =
         "SEARCHING...";
@@ -46,12 +41,7 @@ async function searchWord() {
     searchButton.disabled =
         true;
 
-
     try {
-
-        /* =========================
-           GET DICTIONARY DATA
-        ========================= */
 
         const response =
             await fetch(
@@ -59,46 +49,103 @@ async function searchWord() {
                 encodeURIComponent(word)
             );
 
-
         if (!response.ok) {
-
-            throw new Error(
-                "Word not found"
-            );
+            throw new Error("Word not found");
         }
 
-
-        const entry =
+        let data =
             await response.json();
 
 
-        if (
-            !entry ||
-            !entry.meanings ||
-            !entry.meanings.length
-        ) {
+        /*
+         * SUPPORT BOTH:
+         *
+         * New:
+         * { word, entries: [...] }
+         *
+         * Old:
+         * [ { word, meanings: [...] } ]
+         */
 
-            throw new Error(
-                "No dictionary data"
-            );
+        if (Array.isArray(data)) {
+            data = data[0];
         }
 
 
         /* =========================
-           SELECT FIRST MEANING
+           NEW DICTIONARY FORMAT
         ========================= */
 
-        const meaning =
-            entry.meanings[0];
+        let entry = null;
+        let sense = null;
 
 
-        const definition =
-            meaning
-                ?.definitions
-                ?.find(
+        if (
+            data.entries &&
+            Array.isArray(data.entries)
+        ) {
+
+            /*
+             * Prefer noun first.
+             * This makes "relative" use
+             * the noun meaning.
+             */
+
+            entry =
+                data.entries.find(
                     item =>
-                        item.definition
-                );
+                        item.partOfSpeech ===
+                        "Noun"
+                ) ||
+                data.entries[0];
+
+
+            sense =
+                entry?.senses?.[0];
+
+        }
+
+
+        /* =========================
+           OLD FORMAT FALLBACK
+        ========================= */
+
+        if (!entry && data.meanings) {
+
+            const meaning =
+                data.meanings[0];
+
+            entry = {
+
+                partOfSpeech:
+                    meaning?.partOfSpeech,
+
+                senses: [{
+                    definition:
+                        meaning?.definitions?.[0]?.definition,
+
+                    example:
+                        meaning?.definitions?.[0]?.example,
+
+                    synonyms:
+                        meaning?.synonyms || [],
+
+                    antonyms:
+                        meaning?.antonyms || []
+                }]
+
+            };
+
+            sense =
+                entry.senses[0];
+        }
+
+
+        if (!entry || !sense) {
+            throw new Error(
+                "No dictionary data found"
+            );
+        }
 
 
         /* =========================
@@ -106,54 +153,16 @@ async function searchWord() {
         ========================= */
 
         wordElement.textContent =
-            entry.word || word;
+            data.word || word;
 
 
         /* =========================
-           PHONETIC
+           PRONUNCIATION
         ========================= */
-
-        const phonetic =
-            entry.phonetic ||
-            entry.phonetics?.find(
-                item => item.text
-            )?.text ||
-            "Pronunciation unavailable.";
-
 
         phoneticElement.textContent =
-            phonetic;
-
-
-        /* =========================
-           AUDIO
-        ========================= */
-
-        const audio =
-            entry.phonetics?.find(
-                item => item.audio
-            )?.audio;
-
-
-        if (audio) {
-
-            currentAudio =
-                new Audio(
-                    audio.startsWith("//")
-                        ? "https:" + audio
-                        : audio
-                );
-
-            audioButton.style.display =
-                "block";
-
-        } else {
-
-            currentAudio = null;
-
-            audioButton.style.display =
-                "none";
-        }
+            data.phonetic ||
+            "Pronunciation unavailable.";
 
 
         /* =========================
@@ -161,17 +170,20 @@ async function searchWord() {
         ========================= */
 
         partOfSpeechElement.textContent =
-            meaning.partOfSpeech ||
-            "Not available";
+            entry.partOfSpeech ||
+            "Word";
 
 
         /* =========================
            DEFINITION
         ========================= */
 
-        meaningElement.textContent =
-            definition?.definition ||
+        const definition =
+            sense.definition ||
             "Definition unavailable.";
+
+        meaningElement.textContent =
+            definition;
 
 
         /* =========================
@@ -179,9 +191,11 @@ async function searchWord() {
         ========================= */
 
         const synonyms =
-            definition?.synonyms?.length
-                ? definition.synonyms
-                : meaning.synonyms || [];
+            Array.isArray(
+                sense.synonyms
+            )
+                ? sense.synonyms
+                : [];
 
 
         synonymsElement.textContent =
@@ -195,9 +209,11 @@ async function searchWord() {
         ========================= */
 
         const antonyms =
-            definition?.antonyms?.length
-                ? definition.antonyms
-                : meaning.antonyms || [];
+            Array.isArray(
+                sense.antonyms
+            )
+                ? sense.antonyms
+                : [];
 
 
         antonymsElement.textContent =
@@ -211,7 +227,7 @@ async function searchWord() {
         ========================= */
 
         const example =
-            definition?.example || "";
+            sense.example || "";
 
 
         exampleElement.textContent =
@@ -224,13 +240,13 @@ async function searchWord() {
         ========================= */
 
         armenianElement.textContent =
-            "Translating...";
+            "Loading...";
 
         armenianDefinitionElement.textContent =
-            "Translating...";
+            "Loading...";
 
         armenianExampleElement.textContent =
-            "Translating...";
+            "Loading...";
 
 
         /* =========================
@@ -241,7 +257,6 @@ async function searchWord() {
             "hidden"
         );
 
-
         result.scrollIntoView({
             behavior: "smooth",
             block: "start"
@@ -249,93 +264,71 @@ async function searchWord() {
 
 
         /* =========================
-           TRANSLATION
+           TEMPORARY TRANSLATION
         ========================= */
 
-        if (definition?.definition) {
+        try {
 
-            try {
+            const translationResponse =
+                await fetch(
+                    "/api/translate",
+                    {
+                        method: "POST",
 
-                const translationResponse =
-                    await fetch(
-                        "/api/translate",
-                        {
-                            method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
 
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
+                        body: JSON.stringify({
 
-                            body: JSON.stringify({
+                            word:
+                                word,
 
-                                word:
-                                    word,
+                            partOfSpeech:
+                                entry.partOfSpeech,
 
-                                partOfSpeech:
-                                    meaning.partOfSpeech,
+                            definition:
+                                definition,
 
-                                definition:
-                                    definition.definition,
+                            example:
+                                example
 
-                                example:
-                                    example
-
-                            })
-                        }
-                    );
-
-
-                if (
-                    !translationResponse.ok
-                ) {
-
-                    throw new Error(
-                        "Translation failed"
-                    );
-                }
-
-
-                const translation =
-                    await translationResponse.json();
-
-
-                armenianElement.textContent =
-                    translation.armenian ||
-                    "Translation unavailable.";
-
-
-                armenianDefinitionElement.textContent =
-                    translation.armenianDefinition ||
-                    "Definition unavailable.";
-
-
-                armenianExampleElement.textContent =
-                    translation.armenianExample ||
-                    "Example unavailable.";
-
-
-            } catch (translationError) {
-
-                console.error(
-                    "Translation error:",
-                    translationError
+                        })
+                    }
                 );
 
 
-                armenianElement.textContent =
-                    "Translation unavailable.";
-
-
-                armenianDefinitionElement.textContent =
-                    "Definition unavailable.";
-
-
-                armenianExampleElement.textContent =
-                    "Example unavailable.";
+            if (!translationResponse.ok) {
+                throw new Error(
+                    "Translation failed"
+                );
             }
 
-        } else {
+
+            const translation =
+                await translationResponse.json();
+
+
+            armenianElement.textContent =
+                translation.armenian ||
+                "Translation unavailable.";
+
+            armenianDefinitionElement.textContent =
+                translation.armenianDefinition ||
+                "Definition unavailable.";
+
+            armenianExampleElement.textContent =
+                translation.armenianExample ||
+                "Example unavailable.";
+
+
+        } catch (translationError) {
+
+            console.error(
+                "Translation error:",
+                translationError
+            );
 
             armenianElement.textContent =
                 "Translation unavailable.";
@@ -355,7 +348,6 @@ async function searchWord() {
             error
         );
 
-
         alert(
             "Something went wrong. Please try again."
         );
@@ -372,14 +364,18 @@ async function searchWord() {
 
 
 /* =========================
-   AUDIO BUTTON
+   AUDIO
 ========================= */
 
 audioButton.addEventListener(
     "click",
-    function() {
+    function () {
 
-        if (currentAudio) {
+        if (
+            typeof currentAudio !==
+            "undefined" &&
+            currentAudio
+        ) {
 
             currentAudio.currentTime =
                 0;
@@ -402,17 +398,15 @@ searchButton.addEventListener(
 
 
 /* =========================
-   ENTER KEY
+   ENTER
 ========================= */
 
 searchInput.addEventListener(
     "keydown",
-    function(event) {
+    function (event) {
 
         if (event.key === "Enter") {
-
             searchWord();
-
         }
 
     }
