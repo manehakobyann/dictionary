@@ -31,18 +31,6 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        /*
-         * Wiktionary returns:
-         *
-         * data.en = [
-         *   {
-         *     partOfSpeech: "Noun",
-         *     language: "English",
-         *     definitions: [...]
-         *   }
-         * ]
-         */
-
         const englishEntries = Array.isArray(data.en)
             ? data.en
             : [];
@@ -123,11 +111,12 @@ export default async function handler(req, res) {
 
 
 /* =========================
-   CLEAN WIKTIONARY HTML
+   CLEAN WIKTIONARY TEXT
 ========================= */
 
 function cleanText(text) {
     return String(text)
+        .replace(/\.mw-parser-output\s+\.defdate\{[^}]*\}/g, "")
         .replace(/<[^>]*>/g, "")
         .replace(/&nbsp;/g, " ")
         .replace(/&amp;/g, "&")
