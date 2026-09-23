@@ -14,10 +14,6 @@ export default async function handler(req, res) {
     }
 
     try {
-        /* =========================
-           GET ENGLISH DEFINITIONS
-        ========================= */
-
         const response = await fetch(
             `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word.toLowerCase())}`,
             {
@@ -45,16 +41,8 @@ export default async function handler(req, res) {
             });
         }
 
-        /* =========================
-           GET ARMENIAN TRANSLATION
-        ========================= */
-
         const armenianTranslations =
             await getArmenianTranslations(word);
-
-        /* =========================
-           BUILD ENTRIES
-        ========================= */
 
         const entries = [];
 
@@ -83,7 +71,14 @@ export default async function handler(req, res) {
                     return {
                         definition,
                         example,
-                        armenian: armenianTranslations,
+
+                        // Use the dictionary's first
+                        // Armenian translation only.
+                        armenian:
+                            armenianTranslations.length
+                                ? [armenianTranslations[0]]
+                                : [],
+
                         synonyms: [],
                         antonyms: []
                     };
@@ -159,13 +154,6 @@ async function getArmenianTranslations(word) {
             return [];
         }
 
-        /*
-         * Find the "human abode" section.
-         * This keeps us from accidentally taking
-         * an Armenian translation belonging to
-         * another meaning of the word.
-         */
-
         const humanAbodeIndex =
             html.toLowerCase().indexOf("human abode");
 
@@ -176,11 +164,6 @@ async function getArmenianTranslations(word) {
         const section =
             html.slice(humanAbodeIndex);
 
-        /*
-         * Stop before the next major translation
-         * meaning when possible.
-         */
-
         const nextHeading =
             section.search(
                 /<h[1-6][^>]*>/i
@@ -190,10 +173,6 @@ async function getArmenianTranslations(word) {
             nextHeading > 0
                 ? section.slice(0, nextHeading)
                 : section;
-
-        /*
-         * Look for Armenian language entries.
-         */
 
         const armenianMatches = [
             ...meaningSection.matchAll(
