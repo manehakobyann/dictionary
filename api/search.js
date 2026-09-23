@@ -14,6 +14,10 @@ export default async function handler(req, res) {
     }
 
     try {
+        /* =========================
+           GET ENGLISH DEFINITIONS
+        ========================= */
+
         const response = await fetch(
             `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word.toLowerCase())}`,
             {
@@ -40,6 +44,17 @@ export default async function handler(req, res) {
                 error: "No English dictionary entry found"
             });
         }
+
+        /* =========================
+           GET ARMENIAN TRANSLATION
+        ========================= */
+
+        const armenianTranslations =
+            await getArmenianTranslations(word);
+
+        /* =========================
+           BUILD ENTRIES
+        ========================= */
 
         const entries = [];
 
@@ -68,7 +83,7 @@ export default async function handler(req, res) {
                     return {
                         definition,
                         example,
-                        armenian: [],
+                        armenian: armenianTranslations,
                         synonyms: [],
                         antonyms: []
                     };
@@ -111,7 +126,111 @@ export default async function handler(req, res) {
 
 
 /* =========================
-   CLEAN WIKTIONARY TEXT
+   GET ARMENIAN TRANSLATIONS
+   FROM WIKTIONARY
+========================= */
+
+async function getArmenianTranslations(word) {
+    try {
+        const url =
+            `https://en.wiktionary.org/w/api.php` +
+            `?action=parse` +
+            `&page=${encodeURIComponent(word + "/translations")}` +
+            `&prop=text` +
+            `&format=json` +
+            `&origin=*`;
+
+        const response = await fetch(url, {
+            headers: {
+                "User-Agent": "Lingora/1.0 dictionary project"
+            }
+        });
+
+        if (!response.ok) {
+            return [];
+        }
+
+        const data = await response.json();
+
+        const html =
+            data?.parse?.text?.["*"] || "";
+
+        if (!html) {
+            return [];
+        }
+
+        /*
+         * Find the "human abode" section.
+         * This keeps us from accidentally taking
+         * an Armenian translation belonging to
+         * another meaning of the word.
+         */
+
+        const humanAbodeIndex =
+            html.toLowerCase().indexOf("human abode");
+
+        if (humanAbodeIndex === -1) {
+            return [];
+        }
+
+        const section =
+            html.slice(humanAbodeIndex);
+
+        /*
+         * Stop before the next major translation
+         * meaning when possible.
+         */
+
+        const nextHeading =
+            section.search(
+                /<h[1-6][^>]*>/i
+            );
+
+        const meaningSection =
+            nextHeading > 0
+                ? section.slice(0, nextHeading)
+                : section;
+
+        /*
+         * Look for Armenian language entries.
+         */
+
+        const armenianMatches = [
+            ...meaningSection.matchAll(
+                /lang="hy"[^>]*>(.*?)<\/span>/gi
+            )
+        ];
+
+        const translations = [];
+
+        for (const match of armenianMatches) {
+            const value = cleanText(
+                match[1]
+            );
+
+            if (
+                value &&
+                !translations.includes(value)
+            ) {
+                translations.push(value);
+            }
+        }
+
+        return translations;
+
+    } catch (error) {
+        console.error(
+            "Armenian translation error:",
+            error
+        );
+
+        return [];
+    }
+}
+
+
+/* =========================
+   CLEAN TEXT
 ========================= */
 
 function cleanText(text) {
