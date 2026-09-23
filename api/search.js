@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-
     if (req.method !== "GET") {
         return res.status(405).json({
             error: "Method not allowed"
@@ -15,262 +14,130 @@ export default async function handler(req, res) {
     }
 
     try {
-
         const response = await fetch(
-            `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`,
+            `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word.toLowerCase())}`,
             {
                 headers: {
-                    "User-Agent":
-                        "Lingora/1.0 dictionary project"
+                    "User-Agent": "Lingora/1.0 dictionary project"
                 }
             }
         );
 
         if (!response.ok) {
-
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const data =
-            await response.json();
-
+        const data = await response.json();
 
         /*
-         * Wikimedia returns language data.
-         * We only want English.
+         * Wiktionary returns:
+         *
+         * data.en = [
+         *   {
+         *     partOfSpeech: "Noun",
+         *     language: "English",
+         *     definitions: [...]
+         *   }
+         * ]
          */
 
-        const english =
-            data.en;
+        const englishEntries = Array.isArray(data.en)
+            ? data.en
+            : [];
 
-        if (!english) {
-
+        if (!englishEntries.length) {
             return res.status(404).json({
-                error:
-                    "No English dictionary entry found"
+                error: "No English dictionary entry found"
             });
         }
 
-
-        /*
-         * Convert Wiktionary's POS keys
-         * into readable names.
-         */
-
         const entries = [];
 
-
-        for (
-            const [pos, definitions]
-            of Object.entries(english)
-        ) {
-
-            if (
-                !Array.isArray(definitions)
-            ) {
+        for (const entry of englishEntries) {
+            if (!entry || !Array.isArray(entry.definitions)) {
                 continue;
             }
 
+            const senses = entry.definitions
+                .map((item) => {
+                    const definition = cleanText(
+                        item.definition || ""
+                    );
 
-            const senses =
-                definitions.map(
-                    item => {
+                    let example = "";
 
-                        const definition =
-                            item.definition ||
-                            item.gloss ||
-                            "";
-
-
-                        const example =
-                            item.example ||
-                            "";
-
-
-                        return {
-
-                            definition:
-                                cleanText(
-                                    definition
-                                ),
-
-                            example:
-                                cleanText(
-                                    example
-                                ),
-
-                            armenian: [],
-
-                            synonyms: [],
-
-                            antonyms: []
-
-                        };
+                    if (
+                        Array.isArray(item.examples) &&
+                        item.examples.length
+                    ) {
+                        example = cleanText(
+                            item.examples[0]
+                        );
                     }
-                )
+
+                    return {
+                        definition,
+                        example,
+                        armenian: [],
+                        synonyms: [],
+                        antonyms: []
+                    };
+                })
                 .filter(
-                    item =>
-                        item.definition
+                    (item) => item.definition
                 );
 
-
             if (senses.length) {
-
                 entries.push({
-
                     partOfSpeech:
-                        formatPartOfSpeech(
-                            pos
-                        ),
-
-                    senses:
-                        senses
-
+                        entry.partOfSpeech || "Other",
+                    senses
                 });
             }
         }
 
-
-        /*
-         * Nothing found.
-         */
-
         if (!entries.length) {
-
             return res.status(404).json({
-                error:
-                    "No dictionary definitions found"
+                error: "No dictionary definitions found"
             });
         }
 
-
-        /*
-         * Return Lingora's own
-         * clean dictionary format.
-         */
-
         return res.status(200).json({
-
             word: word,
-
-            entries: entries
-
+            entries
         });
 
     } catch (error) {
-
         console.error(
             "Lingora dictionary error:",
             error
         );
 
         return res.status(500).json({
-
-            error:
-                "Dictionary service unavailable",
-
-            details:
-                error.message
-
+            error: "Dictionary service unavailable"
         });
     }
 }
 
 
 /* =========================
-   PART OF SPEECH
-========================= */
-
-function formatPartOfSpeech(pos) {
-
-    const names = {
-
-        noun: "Noun",
-        verb: "Verb",
-        adjective: "Adjective",
-        adverb: "Adverb",
-        pronoun: "Pronoun",
-        preposition: "Preposition",
-        conjunction: "Conjunction",
-        interjection: "Interjection",
-        determiner: "Determiner",
-        particle: "Particle",
-        numeral: "Numeral",
-        proper_noun: "Proper noun"
-
-    };
-
-    const key =
-        String(pos)
-            .toLowerCase()
-            .replace(/\s+/g, "_");
-
-    return (
-        names[key] ||
-        pos
-    );
-}
-
-
-/* =========================
-   CLEAN TEXT
+   CLEAN WIKTIONARY HTML
 ========================= */
 
 function cleanText(text) {
-
     return String(text)
-
-        .replace(
-            /<[^>]*>/g,
-            ""
-        )
-
-        .replace(
-            /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
-            "$2"
-        )
-
-        .replace(
-            /\[\[([^\]]+)\]\]/g,
-            "$1"
-        )
-
-        .replace(
-            /'''/g,
-            ""
-        )
-
-        .replace(
-            /''/g,
-            ""
-        )
-
-        .replace(
-            /&nbsp;/g,
-            " "
-        )
-
-        .replace(
-            /&amp;/g,
-            "&"
-        )
-
-        .replace(
-            /&quot;/g,
-            '"'
-        )
-
-        .replace(
-            /&#39;/g,
-            "'"
-        )
-
-        .replace(
-            /\s+/g,
-            " "
-        )
-
+        .replace(/<[^>]*>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
+        .replace(/\[\[([^|\]]+)\|([^\]]+)\]\]/g, "$2")
+        .replace(/\[\[([^\]]+)\]\]/g, "$1")
+        .replace(/'''/g, "")
+        .replace(/''/g, "")
+        .replace(/\s+/g, " ")
         .trim();
 }
