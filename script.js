@@ -22,7 +22,7 @@ const audioButton =
 
 
 /* =========================
-   SEARCH
+   SEARCH WORD
 ========================= */
 
 async function searchWord() {
@@ -57,15 +57,9 @@ async function searchWord() {
             await response.json();
 
 
-        /*
-         * SUPPORT BOTH:
-         *
-         * New:
-         * { word, entries: [...] }
-         *
-         * Old:
-         * [ { word, meanings: [...] } ]
-         */
+        /* =========================
+           SUPPORT ARRAY FORMAT
+        ========================= */
 
         if (Array.isArray(data)) {
             data = data[0];
@@ -73,7 +67,7 @@ async function searchWord() {
 
 
         /* =========================
-           NEW DICTIONARY FORMAT
+           FIND DICTIONARY ENTRY
         ========================= */
 
         let entry = null;
@@ -86,19 +80,25 @@ async function searchWord() {
         ) {
 
             /*
-             * Prefer noun first.
-             * This makes "relative" use
-             * the noun meaning.
+             * Prefer Noun when available.
+             * Otherwise use the first entry.
              */
 
             entry =
                 data.entries.find(
                     item =>
-                        item.partOfSpeech ===
-                        "Noun"
+                        String(
+                            item.partOfSpeech
+                        ).toLowerCase() ===
+                        "noun"
                 ) ||
                 data.entries[0];
 
+
+            /*
+             * Use the first sense
+             * belonging to this entry.
+             */
 
             sense =
                 entry?.senses?.[0];
@@ -107,7 +107,7 @@ async function searchWord() {
 
 
         /* =========================
-           OLD FORMAT FALLBACK
+           OLD FORMAT SUPPORT
         ========================= */
 
         if (!entry && data.meanings) {
@@ -122,10 +122,15 @@ async function searchWord() {
 
                 senses: [{
                     definition:
-                        meaning?.definitions?.[0]?.definition,
+                        meaning?.definitions?.[0]
+                            ?.definition,
 
                     example:
-                        meaning?.definitions?.[0]?.example,
+                        meaning?.definitions?.[0]
+                            ?.example,
+
+                    armenian:
+                        [],
 
                     synonyms:
                         meaning?.synonyms || [],
@@ -175,7 +180,7 @@ async function searchWord() {
 
 
         /* =========================
-           DEFINITION
+           ENGLISH DEFINITION
         ========================= */
 
         const definition =
@@ -197,7 +202,6 @@ async function searchWord() {
                 ? sense.synonyms
                 : [];
 
-
         synonymsElement.textContent =
             synonyms.length
                 ? synonyms.join(" · ")
@@ -215,7 +219,6 @@ async function searchWord() {
                 ? sense.antonyms
                 : [];
 
-
         antonymsElement.textContent =
             antonyms.length
                 ? antonyms.join(" · ")
@@ -223,12 +226,11 @@ async function searchWord() {
 
 
         /* =========================
-           EXAMPLE
+           ENGLISH EXAMPLE
         ========================= */
 
         const example =
             sense.example || "";
-
 
         exampleElement.textContent =
             example ||
@@ -236,17 +238,37 @@ async function searchWord() {
 
 
         /* =========================
-           RESET ARMENIAN
+           ARMENIAN
+           FROM DICTIONARY ONLY
         ========================= */
 
+        const armenian =
+            Array.isArray(
+                sense.armenian
+            )
+                ? sense.armenian
+                : [];
+
         armenianElement.textContent =
-            "Loading...";
+            armenian.length
+                ? armenian.join(" · ")
+                : "No Armenian translation available.";
+
+
+        /* =========================
+           ARMENIAN DEFINITION
+        ========================= */
 
         armenianDefinitionElement.textContent =
-            "Loading...";
+            "No Armenian definition available.";
+
+
+        /* =========================
+           ARMENIAN EXAMPLE
+        ========================= */
 
         armenianExampleElement.textContent =
-            "Loading...";
+            "No Armenian example available.";
 
 
         /* =========================
@@ -261,85 +283,6 @@ async function searchWord() {
             behavior: "smooth",
             block: "start"
         });
-
-
-        /* =========================
-           TEMPORARY TRANSLATION
-        ========================= */
-
-        try {
-
-            const translationResponse =
-                await fetch(
-                    "/api/translate",
-                    {
-                        method: "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body: JSON.stringify({
-
-                            word:
-                                word,
-
-                            partOfSpeech:
-                                entry.partOfSpeech,
-
-                            definition:
-                                definition,
-
-                            example:
-                                example
-
-                        })
-                    }
-                );
-
-
-            if (!translationResponse.ok) {
-                throw new Error(
-                    "Translation failed"
-                );
-            }
-
-
-            const translation =
-                await translationResponse.json();
-
-
-            armenianElement.textContent =
-                translation.armenian ||
-                "Translation unavailable.";
-
-            armenianDefinitionElement.textContent =
-                translation.armenianDefinition ||
-                "Definition unavailable.";
-
-            armenianExampleElement.textContent =
-                translation.armenianExample ||
-                "Example unavailable.";
-
-
-        } catch (translationError) {
-
-            console.error(
-                "Translation error:",
-                translationError
-            );
-
-            armenianElement.textContent =
-                "Translation unavailable.";
-
-            armenianDefinitionElement.textContent =
-                "Definition unavailable.";
-
-            armenianExampleElement.textContent =
-                "Example unavailable.";
-        }
-
 
     } catch (error) {
 
@@ -371,18 +314,23 @@ audioButton.addEventListener(
     "click",
     function () {
 
-        if (
-            typeof currentAudio !==
-            "undefined" &&
-            currentAudio
-        ) {
+        const text =
+            wordElement.textContent.trim();
 
-            currentAudio.currentTime =
-                0;
-
-            currentAudio.play();
+        if (!text) {
+            return;
         }
 
+        const speech =
+            new SpeechSynthesisUtterance(text);
+
+        speech.lang = "en-US";
+
+        window.speechSynthesis.cancel();
+
+        window.speechSynthesis.speak(
+            speech
+        );
     }
 );
 
@@ -398,7 +346,7 @@ searchButton.addEventListener(
 
 
 /* =========================
-   ENTER
+   ENTER KEY
 ========================= */
 
 searchInput.addEventListener(
