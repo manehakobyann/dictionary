@@ -16,299 +16,146 @@ export default async function handler(req, res) {
 
     try {
 
-        /* =========================
-           GET STRUCTURED ENTRY
-        ========================= */
-
-        const entryResponse = await fetch(
-            `https://api.wiktapi.dev/v1/en/word/${encodeURIComponent(word)}?lang=en`
+        const response = await fetch(
+            `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`,
+            {
+                headers: {
+                    "User-Agent":
+                        "Lingora/1.0 dictionary project"
+                }
+            }
         );
 
-        if (!entryResponse.ok) {
+        if (!response.ok) {
+
             return res.status(404).json({
                 error: "Word not found"
             });
         }
 
-        const entryData =
-            await entryResponse.json();
-
-
-        /* =========================
-           GET ALL ENGLISH ENTRIES
-        ========================= */
-
-        const entries =
-            Array.isArray(entryData.entries)
-                ? entryData.entries
-                : [];
+        const data =
+            await response.json();
 
 
         /*
-         * IMPORTANT:
-         * Do NOT use entries[0].
-         *
-         * Find the requested grammatical
-         * entry explicitly.
+         * Wikimedia returns language data.
+         * We only want English.
          */
 
-        const preferredOrder = [
-            "noun",
-            "verb",
-            "adjective",
-            "adverb",
-            "pronoun",
-            "preposition",
-            "conjunction",
-            "interjection"
-        ];
+        const english =
+            data.en;
 
+        if (!english) {
 
-        let selectedEntry = null;
-
-        for (const pos of preferredOrder) {
-
-            selectedEntry =
-                entries.find(
-                    entry =>
-                        String(entry.pos)
-                            .toLowerCase() === pos
-                );
-
-            if (selectedEntry) {
-                break;
-            }
-        }
-
-
-        /*
-         * Fallback
-         */
-
-        if (!selectedEntry) {
-            selectedEntry = entries[0];
-        }
-
-
-        if (!selectedEntry) {
             return res.status(404).json({
-                error: "No dictionary entry found"
+                error:
+                    "No English dictionary entry found"
             });
         }
 
 
-        const partOfSpeech =
-            formatPartOfSpeech(
-                selectedEntry.pos
-            );
-
-
-        /* =========================
-           GET DEFINITIONS
-        ========================= */
-
-        const definitionsResponse =
-            await fetch(
-                `https://api.wiktapi.dev/v1/en/word/${encodeURIComponent(word)}/definitions?lang=en`
-            );
-
-
-        let definitionsData = null;
-
-        if (definitionsResponse.ok) {
-
-            definitionsData =
-                await definitionsResponse.json();
-
-        }
-
-
         /*
-         * Find definitions belonging
-         * to the selected POS.
+         * Convert Wiktionary's POS keys
+         * into readable names.
          */
 
-        let senses =
-            selectedEntry.senses || [];
+        const entries = [];
 
 
-        /*
-         * Some API versions return
-         * definitions separately.
-         */
-
-        if (
-            definitionsData &&
-            Array.isArray(
-                definitionsData.entries
-            )
+        for (
+            const [pos, definitions]
+            of Object.entries(english)
         ) {
 
-            const definitionEntry =
-                definitionsData.entries.find(
-                    entry =>
-                        String(entry.pos)
-                            .toLowerCase() ===
-                        String(selectedEntry.pos)
-                            .toLowerCase()
-                );
-
             if (
-                definitionEntry &&
-                Array.isArray(
-                    definitionEntry.senses
+                !Array.isArray(definitions)
+            ) {
+                continue;
+            }
+
+
+            const senses =
+                definitions.map(
+                    item => {
+
+                        const definition =
+                            item.definition ||
+                            item.gloss ||
+                            "";
+
+
+                        const example =
+                            item.example ||
+                            "";
+
+
+                        return {
+
+                            definition:
+                                cleanText(
+                                    definition
+                                ),
+
+                            example:
+                                cleanText(
+                                    example
+                                ),
+
+                            armenian: [],
+
+                            synonyms: [],
+
+                            antonyms: []
+
+                        };
+                    }
                 )
-            ) {
-
-                senses =
-                    definitionEntry.senses;
-            }
-        }
-
-
-        /* =========================
-           FIRST SENSE
-        ========================= */
-
-        const sense =
-            senses.find(
-                item =>
-                    item.glosses &&
-                    item.glosses.length
-            ) || senses[0] || {};
-
-
-        const definition =
-            sense.glosses?.[0] ||
-            "Definition unavailable.";
-
-
-        /* =========================
-           EXAMPLE
-        ========================= */
-
-        let example = "";
-
-        if (
-            Array.isArray(
-                sense.examples
-            ) &&
-            sense.examples.length
-        ) {
-
-            const item =
-                sense.examples[0];
-
-            if (
-                typeof item === "string"
-            ) {
-
-                example = item;
-
-            } else {
-
-                example =
-                    item.text ||
-                    item.example ||
-                    "";
-
-            }
-        }
-
-
-        /* =========================
-           SYNONYMS
-        ========================= */
-
-        const synonyms =
-            extractWords(
-                sense.synonyms
-            );
-
-
-        /* =========================
-           ANTONYMS
-        ========================= */
-
-        const antonyms =
-            extractWords(
-                sense.antonyms
-            );
-
-
-        /* =========================
-           PRONUNCIATION
-        ========================= */
-
-        let phonetic = "";
-
-        if (
-            Array.isArray(
-                selectedEntry.sounds
-            )
-        ) {
-
-            const sound =
-                selectedEntry.sounds.find(
-                    item => item.ipa
+                .filter(
+                    item =>
+                        item.definition
                 );
 
-            if (sound) {
-                phonetic =
-                    sound.ipa;
+
+            if (senses.length) {
+
+                entries.push({
+
+                    partOfSpeech:
+                        formatPartOfSpeech(
+                            pos
+                        ),
+
+                    senses:
+                        senses
+
+                });
             }
         }
 
 
-        /* =========================
-           RESULT
-        ========================= */
+        /*
+         * Nothing found.
+         */
+
+        if (!entries.length) {
+
+            return res.status(404).json({
+                error:
+                    "No dictionary definitions found"
+            });
+        }
+
+
+        /*
+         * Return Lingora's own
+         * clean dictionary format.
+         */
 
         return res.status(200).json({
 
-            word:
-                selectedEntry.word ||
-                word,
+            word: word,
 
-            phonetic:
-                phonetic,
-
-            phonetics: [],
-
-            meanings: [{
-
-                partOfSpeech:
-                    partOfSpeech,
-
-                definitions: [{
-
-                    definition:
-                        definition,
-
-                    example:
-                        example,
-
-                    synonyms:
-                        synonyms,
-
-                    antonyms:
-                        antonyms
-
-                }],
-
-                synonyms:
-                    synonyms,
-
-                antonyms:
-                    antonyms
-
-            }],
-
-            synonyms:
-                synonyms,
-
-            antonyms:
-                antonyms
+            entries: entries
 
         });
 
@@ -333,7 +180,7 @@ export default async function handler(req, res) {
 
 
 /* =========================
-   FORMAT POS
+   PART OF SPEECH
 ========================= */
 
 function formatPartOfSpeech(pos) {
@@ -350,46 +197,80 @@ function formatPartOfSpeech(pos) {
         interjection: "Interjection",
         determiner: "Determiner",
         particle: "Particle",
-        numeral: "Numeral"
+        numeral: "Numeral",
+        proper_noun: "Proper noun"
 
     };
 
-    const value =
-        String(pos || "")
-            .toLowerCase();
+    const key =
+        String(pos)
+            .toLowerCase()
+            .replace(/\s+/g, "_");
 
-    return names[value] ||
-        pos ||
-        "Word";
+    return (
+        names[key] ||
+        pos
+    );
 }
 
 
 /* =========================
-   EXTRACT WORDS
+   CLEAN TEXT
 ========================= */
 
-function extractWords(items) {
+function cleanText(text) {
 
-    if (!Array.isArray(items)) {
-        return [];
-    }
+    return String(text)
 
-    return items
-        .map(item => {
+        .replace(
+            /<[^>]*>/g,
+            ""
+        )
 
-            if (
-                typeof item === "string"
-            ) {
-                return item;
-            }
+        .replace(
+            /\[\[([^|\]]+)\|([^\]]+)\]\]/g,
+            "$2"
+        )
 
-            return (
-                item.word ||
-                item.term ||
-                item.text ||
-                ""
-            );
-        })
-        .filter(Boolean)
-        .slice(0, 8);
+        .replace(
+            /\[\[([^\]]+)\]\]/g,
+            "$1"
+        )
+
+        .replace(
+            /'''/g,
+            ""
+        )
+
+        .replace(
+            /''/g,
+            ""
+        )
+
+        .replace(
+            /&nbsp;/g,
+            " "
+        )
+
+        .replace(
+            /&amp;/g,
+            "&"
+        )
+
+        .replace(
+            /&quot;/g,
+            '"'
+        )
+
+        .replace(
+            /&#39;/g,
+            "'"
+        )
+
+        .replace(
+            /\s+/g,
+            " "
+        )
+
+        .trim();
 }
